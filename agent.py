@@ -70,6 +70,13 @@ class Agent:
             return None
 
         return response
+    def saveMemory(self, memory_text):
+        if memory_text:
+            memory_list = memory_text.splitlines()
+            for memory in memory_list:
+                memory = memory.strip()
+                if memory:
+                    self.memory_manager.save(memory)
 
     def run_one_turn(self, user_input):
         """处理一轮用户输入：记记忆 → 调模型 → 跑工具循环 → 返回回复文本。"""

@@ -1,0 +1,16 @@
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+# N = pep8-naming：函数/参数/变量要用 snake_case，不要小驼峰
+select = ["N"]
+
+[tool.ruff.lint.pep8-naming]
+# 类名仍用大驼峰（PascalCase），这是 Python 惯例
+# 下面这些会抓小驼峰：
+# N802 函数名  myFunc -> my_func
+# N803 参数名  myArg  -> my_arg
+# N806 变量名  myVar  -> my_var
+classmethod-decorators = ["classmethod"]
+staticmethod-decorators = ["staticmethod"]
