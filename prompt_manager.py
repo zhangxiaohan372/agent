@@ -48,7 +48,12 @@ class PromptManager:
 
         NONE
 
-        如果有，请输出一句长期事实。
+        如果有，请按以下格式输出，每条占一行：
+
+        长期事实|category|importance
+
+        category 只能是：profile / preference / skill / project / goal
+        importance 必须是 1-10 的整数
 
         例如：
 
@@ -56,7 +61,7 @@ class PromptManager:
         我喜欢Python
 
         输出：
-        用户喜欢Python
+        用户喜欢Python|preference|7
 
         输入：
         北京今天天气怎么样
@@ -68,25 +73,38 @@ class PromptManager:
         我是软件工程专业
 
         输出：
-        用户是软件工程专业学生
+        用户是软件工程专业学生|profile|8
+
+        输入：
+        我喜欢AI和Python，常住北京
+
+        输出：
+        用户喜欢AI|preference|7
+        用户喜欢Python|preference|7
+        用户常住北京|profile|8
 
         不要输出任何解释。
-
         不要输出 Markdown。
-
         不要输出句号。
+        如果没有长期信息，只输出：NONE
+        """
 
-        如果有多个长期信息，
+    def get_memory_search_prompt(self):
+        return """
+        你是一个记忆检索判断助手。
 
-        每条占一行。
+        判断用户的问题是否需要查询用户过去保存的长期记忆。
 
-        例如：
+        以下情况需要查询：
+        - 用户询问过去的信息
+        - 用户询问自己的偏好、习惯、经历
+        - 用户提到“之前”“记得”“我喜欢”等需要上下文的问题
 
-        用户喜欢AI
-        用户喜欢Python
-        用户常住北京
+        以下情况不需要查询：
+        - 普通知识问答
+        - 编程问题
+        - 与用户个人信息无关的问题
 
-        如果没有，则输出：
-
-        NONE
+        如果需要查询，只输出 YES。
+        如果不需要查询，只输出 NO。
         """
