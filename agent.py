@@ -6,8 +6,7 @@ import os
 from message_manager import MessageManager
 from prompt_manager import PromptManager
 from tool_manager import ToolManager
-from memory_manager import MemoryManager
-from embedding_manager import EmbeddingManager
+from memory import MemoryManager, EmbeddingManager
 
 class Agent:
     def __init__(self):

@@ -2,7 +2,7 @@ import json
 import math
 
 from database.database import get_connection
-from embedding_manager import EmbeddingManager
+from .embedding_manager import EmbeddingManager
 
 
 class MemoryManager:
