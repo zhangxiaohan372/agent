@@ -7,7 +7,7 @@ from message_manager import MessageManager
 from prompt_manager import PromptManager
 from tool_manager import ToolManager
 from memory import MemoryManager, EmbeddingManager
-
+from knowledge import KnowledgeManager
 class Agent:
     def __init__(self):
         #1.openai客户端
@@ -23,12 +23,16 @@ class Agent:
         )
         #3.tools
         self.tool_manager = ToolManager()
-        #让大模型拥有长期记忆
+        #4.Memory
         self.memory_manager = MemoryManager()
         self.embedding_manager = EmbeddingManager()
         # 加上记忆提取器放到大模型里
         self.memory_extraction_prompt = self.prompt_manager.get_memory_extraction_prompt()
         self.memory_search_prompt = self.prompt_manager.get_memory_search_prompt()
+        #5.Knowledge
+        self.knowledge_manager = KnowledgeManager("knowledge/rag-test-document.md")
+        # 加上知识库回答器放到大模型里
+        self.knowledge_router_prompt = self.prompt_manager.get_knowledge_router_prompt()
     # 封装调用大模型的过程
     def _call_llm(self):
         messages = self.message_manager.get_messages().copy()
@@ -47,7 +51,7 @@ class Agent:
             message = self._call_llm()
             self.message_manager.add_assistant_message(message)
         return message
-    # 判断用户输入是否值得存入数据库
+    # 判断用户输入是否值得存入记忆（存入memory）
     def _extract_memory(self, user_input):
         response = self.client.chat.completions.create(
             model="deepseek-v4-pro",
@@ -68,7 +72,7 @@ class Agent:
             return None
 
         return response
-    # 判断用户输入是否需要调用数据库中的数据回答
+    # 判断用户输入是否需要调用数据库中的数据回答（搜索memory）
     def _need_memory_search(self, user_input):
         response = self.client.chat.completions.create(
             model="deepseek-v4-pro",
@@ -88,8 +92,26 @@ class Agent:
             return True
         else:
             return False
+    # 判断用户输入是否需要调用知识库回答（搜索knowledge）
+    def _need_knowledge_search(self,user_input):
+        response = self.client.chat.completions.create(
+            model="deepseek-v4-pro",
+            messages=[
+                {
+                    "role":"system",
+                    "content":self.knowledge_router_prompt
+                },
+                {
+                    "role":"user",
+                    "content":user_input
+                }
+            ]
+        )
+        result = response.choices[0].message.content.strip()
+        return result == "YES"
     def run_one_turn(self, user_input):
-        """处理一轮用户输入：记记忆 → 调模型 → 跑工具循环 → 返回回复文本。"""
+        #处理一轮用户输入：1.记忆 2.搜索memory 3.搜索knowledge 4.调模型 5.跑工具循环 6.返回回复文本。
+        
         memory_text = self._extract_memory(user_input)
         if memory_text:
             memory_list = memory_text.splitlines()
@@ -110,8 +132,10 @@ class Agent:
         self.message_manager.add_user_message(user_input)
         if self._need_memory_search(user_input):
             memory_list = self.memory_manager.search(user_input)
-            # 加入messgae当中，再次请求模型回答问题
             self.message_manager.add_memory_message(memory_list)
+        if self._need_knowledge_search(user_input):
+            knowledge_list = self.knowledge_manager.search(user_input)
+            self.message_manager.add_knowledge_message(knowledge_list)
         assistant_message = self._call_llm()
         self.message_manager.add_assistant_message(assistant_message)
         assistant_message = self._handle_tool_call(assistant_message)

@@ -36,5 +36,19 @@ class MessageManager:
             "content": "以下是与当前问题相关的长期记忆，请结合这些信息回答用户：\n" + "\n".join(lines)
         })
 
+    def add_knowledge_message(self, knowledge_list):
+        if not knowledge_list:
+            return
+        lines = []
+        for row in knowledge_list:
+            content = row["content"]
+            source = row["source"]
+            score = row["score"]
+            lines.append(f"- [{source}|相似度{score:.4f}] {content}")
+        self.messages.append({
+            "role": "system",
+            "content": "以下是与当前问题相关的知识库内容，请结合这些信息回答用户：\n" + "\n".join(lines)
+        })
+
     def get_messages(self):
         return self.messages
