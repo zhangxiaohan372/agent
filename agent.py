@@ -8,6 +8,7 @@ from prompt_manager import PromptManager
 from tool_manager import ToolManager
 from memory import MemoryManager, EmbeddingManager
 from knowledge import KnowledgeManager
+from router import Router
 class Agent:
     def __init__(self):
         #1.openai客户端
@@ -20,6 +21,10 @@ class Agent:
         self.prompt_manager = PromptManager()
         self.message_manager.add_system_message(
             self.prompt_manager.get_system_prompt()
+        )
+        self.router = Router(
+            client=self.client,
+            prompt=self.prompt_manager.get_router_prompt(),
         )
         #3.tools
         self.tool_manager = ToolManager()
@@ -109,9 +114,8 @@ class Agent:
         )
         result = response.choices[0].message.content.strip()
         return result == "YES"
-    def run_one_turn(self, user_input):
-        #处理一轮用户输入：1.记忆 2.搜索memory 3.搜索knowledge 4.调模型 5.跑工具循环 6.返回回复文本。
         
+    def run_one_turn(self, user_input):
         memory_text = self._extract_memory(user_input)
         if memory_text:
             memory_list = memory_text.splitlines()
@@ -130,10 +134,11 @@ class Agent:
                 embedding = self.embedding_manager.embed(memory)
                 self.memory_manager.save(memory, category, importance, embedding)
         self.message_manager.add_user_message(user_input)
-        if self._need_memory_search(user_input):
+        routes = self.router.route(user_input)
+        if "MEMORY" in routes:
             memory_list = self.memory_manager.search(user_input)
             self.message_manager.add_memory_message(memory_list)
-        if self._need_knowledge_search(user_input):
+        if "KNOWLEDGE" in routes:
             knowledge_list = self.knowledge_manager.search(user_input)
             self.message_manager.add_knowledge_message(knowledge_list)
         assistant_message = self._call_llm()

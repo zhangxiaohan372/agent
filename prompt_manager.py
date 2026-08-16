@@ -137,3 +137,27 @@ class PromptManager:
 
             只返回 YES 或 NO，不要解释。
         """
+    def get_router_prompt(self):
+        return """
+            你是一个请求路由器。
+
+            请判断用户问题需要哪些能力，并返回 JSON：
+
+            {
+            "routes": []
+            }
+
+            routes 可以包含：
+
+            DIRECT：无需查询或调用工具，直接回答
+            MEMORY：查询用户长期记忆
+            KNOWLEDGE：查询企业知识库
+            TOOL：调用工具
+
+            规则：
+
+            - 可以同时选择多个能力
+            - 如果选择了其他能力，就不要选择 DIRECT
+            - 如果完全不需要查询或工具，才选择 DIRECT
+            - 只能返回 JSON，不要输出解释
+        """
