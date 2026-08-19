@@ -1,3 +1,4 @@
+# 用户提出问题 → 转 embedding → 去知识库找最相关 chunk → 返回结果
 from .chunker import Chunker
 from .document_loader import DocumentLoader
 from memory.embedding_manager import EmbeddingManager
@@ -9,71 +10,8 @@ from database.database import get_connection
 
 class KnowledgeManager:
     def __init__(self,source_path):
-        self.source_path = source_path
-        self.loader = DocumentLoader()
-        self.chunker = Chunker()
         self.embedding_manager = EmbeddingManager()
 
-    def load_and_chunk(self):
-
-        text = self.loader.load(self.source_path)
-        chunks = self.chunker.split(text)
-        return chunks
-
-    def embed_chunks(self,chunks):
-        embeddings = []
-
-        for chunk in chunks:
-            embedding = self.embedding_manager.embed(chunk)
-            embeddings.append(embedding)
-
-        return embeddings
-
-    def create_document(self, title, source=None):
-        create_tables()
-        connection = get_connection()
-        cursor = connection.cursor()
-        cursor.execute(
-            """
-            INSERT INTO knowledge_documents (title, source)
-            VALUES (?, ?)
-            """,
-            (title, source),
-        )
-        document_id = cursor.lastrowid
-        connection.commit()
-        cursor.close()
-        connection.close()
-        return document_id
-
-    def save_chunks(self, chunks, embeddings, source=None, document_id=None):
-        # ! source 由调用方指定；未指定时使用知识库默认来源文件
-        source = self.source_path if source is None else source
-        if document_id is None:
-            document_id = self.create_document(
-                title=Path(str(source)).name or str(source),
-                source=source,
-            )
-        create_tables()
-        connection = get_connection()
-        cursor = connection.cursor()
-        for chunk,embedding in zip(chunks,embeddings):
-            cursor.execute(
-                """
-                INSERT INTO knowledge_chunks
-                    (document_id, content, embedding, source)
-                VALUES (?,?,?,?)
-                """,
-                (
-                    document_id,
-                    chunk,
-                    json.dumps(embedding),
-                    source,
-                )
-            )
-        connection.commit()
-        cursor.close()
-        connection.close()
     #余弦相似度数学公式
     def cosine_similarity(self,a, b):
 
@@ -138,21 +76,4 @@ class KnowledgeManager:
 
         return scored[:top_k]
 
-    # ! 增加知识进入（用户输入知识库） 
-    def ingest_text(self, text, source, title=None):
-        chunks = self.chunker.split(text)
-        embeddings = self.embed_chunks(chunks)
-        source = self.source_path if source is None else source
-        title = title or Path(str(source)).name or str(source)
-        document_id = self.create_document(title=title, source=source)
-        self.save_chunks(
-            chunks,
-            embeddings,
-            source=source,
-            document_id=document_id,
-        )
-        return document_id
-
-    def ingest_file(self, file_path):
-        text = self.loader.load(file_path)
-        return self.ingest_text(text, file_path, title=Path(file_path).name)
+   
