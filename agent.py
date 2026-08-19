@@ -33,11 +33,8 @@ class Agent:
         self.embedding_manager = EmbeddingManager()
         # 加上记忆提取器放到大模型里
         self.memory_extraction_prompt = self.prompt_manager.get_memory_extraction_prompt()
-        self.memory_search_prompt = self.prompt_manager.get_memory_search_prompt()
         #5.Knowledge
-        self.knowledge_manager = KnowledgeManager("knowledge/rag-test-document.md")
-        # 加上知识库回答器放到大模型里
-        self.knowledge_router_prompt = self.prompt_manager.get_knowledge_router_prompt()
+        self.knowledge_manager = KnowledgeManager("knowledge_document/rag-test-document.md")
     # 封装调用大模型的过程
     def _call_llm(self):
         messages = self.message_manager.get_messages().copy()
@@ -77,44 +74,6 @@ class Agent:
             return None
 
         return response
-    # 判断用户输入是否需要调用数据库中的数据回答（搜索memory）
-    def _need_memory_search(self, user_input):
-        response = self.client.chat.completions.create(
-            model="deepseek-v4-pro",
-            messages=[
-                {
-                    "role":"system",
-                    "content":self.memory_search_prompt
-                },
-                {
-                    "role":"user",
-                    "content":user_input
-                }
-            ]
-        )
-        response = response.choices[0].message.content.strip()
-        if response == "YES":
-            return True
-        else:
-            return False
-    # 判断用户输入是否需要调用知识库回答（搜索knowledge）
-    def _need_knowledge_search(self,user_input):
-        response = self.client.chat.completions.create(
-            model="deepseek-v4-pro",
-            messages=[
-                {
-                    "role":"system",
-                    "content":self.knowledge_router_prompt
-                },
-                {
-                    "role":"user",
-                    "content":user_input
-                }
-            ]
-        )
-        result = response.choices[0].message.content.strip()
-        return result == "YES"
-        
     def run_one_turn(self, user_input):
         memory_text = self._extract_memory(user_input)
         if memory_text:
@@ -138,9 +97,11 @@ class Agent:
         if "MEMORY" in routes:
             memory_list = self.memory_manager.search(user_input)
             self.message_manager.add_memory_message(memory_list)
-        if "KNOWLEDGE" in routes:
+        if "KNOWLEDGE_QUERY" in routes:
             knowledge_list = self.knowledge_manager.search(user_input)
             self.message_manager.add_knowledge_message(knowledge_list)
+        if "KNOWLEDGE_INGEST" in routes:
+            self.knowledge_manager.ingest_text(user_input, source="user_input")
         assistant_message = self._call_llm()
         self.message_manager.add_assistant_message(assistant_message)
         assistant_message = self._handle_tool_call(assistant_message)

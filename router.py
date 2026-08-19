@@ -4,7 +4,8 @@ class Router:
     VALID_ROUTES = {
         "DIRECT",
         "MEMORY",
-        "KNOWLEDGE",
+        "KNOWLEDGE_QUERY",
+        "KNOWLEDGE_INGEST",
         "TOOL",
     }
     

@@ -89,54 +89,6 @@ class PromptManager:
         如果没有长期信息，只输出：NONE
         """
 
-    def get_memory_search_prompt(self):
-        return """
-        你是一个记忆检索判断助手。
-
-        判断用户的问题是否需要查询用户过去保存的长期记忆。
-
-        以下情况需要查询：
-        - 用户询问过去的信息
-        - 用户询问自己的偏好、习惯、经历
-        - 用户提到“之前”“记得”“我喜欢”等需要上下文的问题
-
-        以下情况不需要查询：
-        - 普通知识问答
-        - 编程问题
-        - 与用户个人信息无关的问题
-
-        如果需要查询，只输出 YES。
-        如果不需要查询，只输出 NO。
-        """
-
-    def get_knowledge_router_prompt(self):
-        return """
-            你是一个知识库查询判断器。
-
-            你的任务是判断用户的问题是否需要查询知识库。
-
-            如果用户的问题涉及：
-            - 编程知识
-            - 技术概念
-            - 项目文档
-            - API说明
-            - 教程
-            - 产品信息
-
-            返回：
-            YES
-
-            如果用户的问题属于：
-            - 日常聊天
-            - 情感交流
-            - 简单闲聊
-            - 不需要外部知识
-
-            返回：
-            NO
-
-            只返回 YES 或 NO，不要解释。
-        """
     def get_router_prompt(self):
         return """
             你是一个请求路由器。
@@ -151,7 +103,8 @@ class PromptManager:
 
             DIRECT：无需查询或调用工具，直接回答
             MEMORY：查询用户长期记忆
-            KNOWLEDGE：查询企业知识库
+            KNOWLEDGE_QUERY：查询企业知识库
+            KNOWLEDGE_INGEST：将用户提供的明确知识、规则、文档内容写入知识库
             TOOL：调用工具
 
             规则：
@@ -160,4 +113,5 @@ class PromptManager:
             - 如果选择了其他能力，就不要选择 DIRECT
             - 如果完全不需要查询或工具，才选择 DIRECT
             - 只能返回 JSON，不要输出解释
+
         """

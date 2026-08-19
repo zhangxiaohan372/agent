@@ -19,9 +19,19 @@ def create_tables():
     )
     """
     # 创建知识库表
+    documents_sql = """
+    CREATE TABLE IF NOT EXISTS knowledge_documents(
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         title TEXT NOT NULL,
+         source TEXT,
+         created_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """
+    # 知识分块表
     knowledge_sql = """
     CREATE TABLE IF NOT EXISTS knowledge_chunks(
          id INTEGER PRIMARY KEY AUTOINCREMENT,
+         document_id INTEGER NOT NULL,
          content TEXT NOT NULL,
          embedding TEXT,
          source TEXT,
@@ -29,7 +39,15 @@ def create_tables():
     )
     """
     cursor.execute(memory_sql)
+    cursor.execute(documents_sql)
     cursor.execute(knowledge_sql)
+    # ! 创建索引加快寻找knowledge的速度
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document_id
+        ON knowledge_chunks(document_id)
+        """
+    )
     connection.commit()
     cursor.close()
     connection.close()
