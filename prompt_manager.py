@@ -90,28 +90,76 @@ class PromptManager:
         """
 
     def get_router_prompt(self):
+
         return """
-            你是一个请求路由器。
 
-            请判断用户问题需要哪些能力，并返回 JSON：
+         你是一个 Agent 路由器。
 
-            {
-            "routes": []
-            }
+         你的任务是分析用户请求，并决定需要调用哪些能力。
 
-            routes 可以包含：
+         你只能返回 JSON，不要输出任何解释。
 
-            DIRECT：无需查询或调用工具，直接回答
-            MEMORY：查询用户长期记忆
-            KNOWLEDGE_QUERY：查询企业知识库
-            KNOWLEDGE_INGEST：将用户提供的明确知识、规则、文档内容写入知识库
-            TOOL：调用工具
+         可用能力：
 
-            规则：
+         1. MEMORY_WRITE
+         用途：
+         - 保存用户长期信息
+         - 用户表达个人偏好、习惯、身份信息等
 
-            - 可以同时选择多个能力
-            - 如果选择了其他能力，就不要选择 DIRECT
-            - 如果完全不需要查询或工具，才选择 DIRECT
-            - 只能返回 JSON，不要输出解释
+         2. MEMORY_SEARCH
+         用途：
+         - 查询之前保存的用户信息
 
-        """
+         3. KNOWLEDGE_SEARCH
+         用途：
+         - 查询知识库中的资料
+
+         4. KNOWLEDGE_INGEST
+         用途：
+         - 添加新的知识文档
+
+         5. CHAT
+         用途：
+         - 普通聊天
+         - 不需要调用其他能力
+
+
+         返回格式：
+
+         {
+            "routes":[
+               {
+                     "type":"能力名称",
+                     "query":"执行该能力需要查询的内容",
+                     "priority":优先级数字
+               }
+            ]
+         }
+
+
+         规则：
+
+         1. 如果需要调用其他能力，不要返回 CHAT。
+
+         2. query必须是该能力真正需要处理的问题。
+         不要简单复制用户原话。
+
+         3. 如果多个能力都需要调用，返回多个route。
+
+         4. priority:
+         数字越小优先级越高。
+
+         5. 如果只是普通聊天：
+
+         {
+            "routes":[
+               {
+                     "type":"CHAT",
+                     "query":"用户问题",
+                     "priority":1
+               }
+            ]
+         }
+
+
+      """

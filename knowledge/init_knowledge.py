@@ -8,8 +8,8 @@
 # Embedding模型
 #         ↓
 # knowledge_chunks表
-from document_loader import DocumentLoader
-from chunker import Chunker
+from .document_loader import DocumentLoader
+from .chunker import Chunker
 from memory.embedding_manager import EmbeddingManager
 from pathlib import Path
 from database.init_db import create_tables
@@ -40,10 +40,12 @@ class InitKnowledge:
         connection.close()
         return document_id
 
+    def embed_chunks(self, chunks):
+        return [self.embedding_manager.embed(chunk) for chunk in chunks]
+
     # 保存文章切片
     def save_chunks(self, chunks, embeddings, source=None, document_id=None):
-        # ! source 由调用方指定；未指定时使用知识库默认来源文件
-        source = self.source_path if source is None else source
+        source = source or "unknown"
         if document_id is None:
             document_id = self.create_document(
                 title=Path(str(source)).name or str(source),
@@ -74,7 +76,7 @@ class InitKnowledge:
     def ingest_text(self, text, source, title=None):
         chunks = self.chunker.split(text)
         embeddings = self.embed_chunks(chunks)
-        source = self.source_path if source is None else source
+        source = source or "user_input"
         title = title or Path(str(source)).name or str(source)
         document_id = self.create_document(title=title, source=source)
         self.save_chunks(
@@ -86,5 +88,5 @@ class InitKnowledge:
         return document_id
 
     def ingest_file(self, file_path):
-        text = self.loader.load(file_path)
+        text = self.document_loader.load(file_path)
         return self.ingest_text(text, file_path, title=Path(file_path).name)

@@ -1,12 +1,13 @@
 import json
 
+
 class Router:
     VALID_ROUTES = {
-        "DIRECT",
-        "MEMORY",
-        "KNOWLEDGE_QUERY",
+        "MEMORY_WRITE",
+        "MEMORY_SEARCH",
+        "KNOWLEDGE_SEARCH",
         "KNOWLEDGE_INGEST",
-        "TOOL",
+        "CHAT",
     }
     
     def __init__(self,client,prompt,model="deepseek-v4-pro"):
@@ -29,20 +30,43 @@ class Router:
             ]
         )
         content = response.choices[0].message.content.strip()
-
         try:
             data = json.loads(content)
             routes = data.get("routes",[])
         except:
-            return ["DIRECT"]
+            return [
+                {
+                    "type":"CHAT",
+                    "priority":1,
+                    "query":user_input
+                }
+            ]
 
-        routes = [
-            route for route in routes if route in self.VALID_ROUTES
-        ]
-        if not routes:
-            return ["DIRECT"]
+        # 过滤非法route
+        valid_routes = []
 
-        if len(routes) > 1:
-            routes = [route for route in routes if route != "DIRECT"]
+        for route in routes:
+            # 先判断是不是字典
+            if not isinstance(route, dict):
+                continue
+            route_type = route.get("type")
+            if route_type not in self.VALID_ROUTES:
+                continue
+            valid_routes.append(
+                {
+                    "type": route_type,
+                    "query": route.get("query", user_input),
+                    "priority": route.get("priority", 1),
+                }
+            )
+        # 没有合法的route
+        if not valid_routes:
+            return [{"type": "CHAT", "priority": 1, "query": user_input}]
 
-        return routes or ["DIRECT"]
+        # 如果存在其他能力，则删除CHAT
+        has_non_chat = any(route["type"] != "CHAT" for route in valid_routes)
+
+        if has_non_chat:
+            valid_routes = [route for route in valid_routes if route["type"] != "CHAT"]
+
+        return valid_routes

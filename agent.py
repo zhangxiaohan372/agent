@@ -11,12 +11,12 @@ from knowledge import KnowledgeManager
 from router import Router
 class Agent:
     def __init__(self):
-        #1.openai客户端
+        # 1. openai客户端
         self.client = OpenAI(
             base_url="https://api.deepseek.com/v1",
             api_key=os.getenv("OPENAI_API_KEY")
         )
-        #2.messages
+        # 2. messages
         self.message_manager = MessageManager()
         self.prompt_manager = PromptManager()
         self.message_manager.add_system_message(
@@ -26,15 +26,21 @@ class Agent:
             client=self.client,
             prompt=self.prompt_manager.get_router_prompt(),
         )
-        #3.tools
+        # 3. tools
         self.tool_manager = ToolManager()
-        #4.Memory
+        # 4. Memory
         self.memory_manager = MemoryManager()
         self.embedding_manager = EmbeddingManager()
         # 加上记忆提取器放到大模型里
         self.memory_extraction_prompt = self.prompt_manager.get_memory_extraction_prompt()
-        #5.Knowledge
+        # 5. Knowledge
         self.knowledge_manager = KnowledgeManager("knowledge_document/rag-test-document.md")
+        # 6. executor
+        self.executor = AgentExecutor(
+            memory_manager=self.memory_manager,
+            knowledge_manager=self.knowledge_manager,
+            tool_manager=self.tool_manager
+        )
     # 封装调用大模型的过程
     def _call_llm(self):
         messages = self.message_manager.get_messages().copy()
@@ -75,37 +81,22 @@ class Agent:
 
         return response
     def run_one_turn(self, user_input):
-        memory_text = self._extract_memory(user_input)
-        if memory_text:
-            memory_list = memory_text.splitlines()
-            for line in memory_list:
-                line = line.strip()
-                if not line or line == "NONE":
-                    continue
-                parts = [part.strip() for part in line.split("|")]
-                if len(parts) != 3:
-                    continue
-                memory, category, importance = parts
-                try:
-                    importance = int(importance)
-                except ValueError:
-                    continue
-                embedding = self.embedding_manager.embed(memory)
-                self.memory_manager.save(memory, category, importance, embedding)
-        self.message_manager.add_user_message(user_input)
+        # fix 直接让router决定要做什么，然后executor执行
+        # 1. router决定要做什么
         routes = self.router.route(user_input)
-        if "MEMORY" in routes:
-            memory_list = self.memory_manager.search(user_input)
-            self.message_manager.add_memory_message(memory_list)
-        if "KNOWLEDGE_QUERY" in routes:
-            knowledge_list = self.knowledge_manager.search(user_input)
-            self.message_manager.add_knowledge_message(knowledge_list)
-        if "KNOWLEDGE_INGEST" in routes:
-            self.knowledge_manager.ingest_text(user_input, source="user_input")
-        assistant_message = self._call_llm()
-        self.message_manager.add_assistant_message(assistant_message)
-        assistant_message = self._handle_tool_call(assistant_message)
-        return assistant_message.content
+        # 2. executor执行
+        context = self.executor.execute(routes)
+        # 3. 先在用户信息里面加入参考信息
+        self.message_manager.add_user_message(
+            f"""
+                参考信息:
+                {context}
+            """
+        )
+        # 4. 把执行结果交给LLM
+        # todo 之后会可能改这里直接让llm接收参数
+        answer = self._call_llm()
+        return answer
 
     def chat(self):
         while True:

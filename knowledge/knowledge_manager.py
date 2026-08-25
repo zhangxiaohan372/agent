@@ -1,16 +1,16 @@
 # 用户提出问题 → 转 embedding → 去知识库找最相关 chunk → 返回结果
-from .chunker import Chunker
-from .document_loader import DocumentLoader
 from memory.embedding_manager import EmbeddingManager
 import json
 import math
-from pathlib import Path
 from database.init_db import create_tables
 from database.database import get_connection
+from .init_knowledge import InitKnowledge
 
 class KnowledgeManager:
-    def __init__(self,source_path):
+    def __init__(self,source_path=None):
         self.embedding_manager = EmbeddingManager()
+        self.init_knowledge = InitKnowledge()
+        self.source_path = source_path
 
     #余弦相似度数学公式
     def cosine_similarity(self,a, b):
@@ -75,5 +75,8 @@ class KnowledgeManager:
         connection.close()
 
         return scored[:top_k]
+
+    def ingest_text(self, text, source="user_input", title=None):
+        return self.init_knowledge.ingest_text(text, source=source, title=title)
 
    
