@@ -9,6 +9,7 @@ from tool_manager import ToolManager
 from memory import MemoryManager, EmbeddingManager
 from knowledge import KnowledgeManager
 from router import Router
+from executor import AgentExecutor
 class Agent:
     def __init__(self):
         # 1. openai客户端
@@ -59,40 +60,15 @@ class Agent:
             message = self._call_llm()
             self.message_manager.add_assistant_message(message)
         return message
-    # 判断用户输入是否值得存入记忆（存入memory）
-    def _extract_memory(self, user_input):
-        response = self.client.chat.completions.create(
-            model="deepseek-v4-pro",
-            messages=[
-                {
-                    "role":"system", 
-                    "content":self.memory_extraction_prompt
-                },
-                {
-                    "role":"user", 
-                    "content":user_input
-                }
-            ]
-        )
-        response =  response.choices[0].message.content.strip()
-
-        if response == "NONE":
-            return None
-
-        return response
     def run_one_turn(self, user_input):
         # fix 直接让router决定要做什么，然后executor执行
         # 1. router决定要做什么
         routes = self.router.route(user_input)
         # 2. executor执行
         context = self.executor.execute(routes)
-        # 3. 先在用户信息里面加入参考信息
-        self.message_manager.add_user_message(
-            f"""
-                参考信息:
-                {context}
-            """
-        )
+        # 3. 先注入参考上下文（system role），再添加用户问题
+        self.message_manager.add_context_message(context)
+        self.message_manager.add_user_message(user_input)
         # 4. 把执行结果交给LLM
         # todo 之后会可能改这里直接让llm接收参数
         answer = self._call_llm()
@@ -104,7 +80,7 @@ class Agent:
             if user_input.lower() == "exit":
                 break
             reply = self.run_one_turn(user_input)
-            print(reply)
+            print(reply.content)
 
 agent = Agent()
 agent.chat()

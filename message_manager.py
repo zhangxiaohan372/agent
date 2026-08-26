@@ -50,5 +50,15 @@ class MessageManager:
             "content": "以下是与当前问题相关的知识库内容，请结合这些信息回答用户：\n" + "\n".join(lines)
         })
 
+    def add_context_message(self, content):
+        if not content:
+            return
+        self.messages.append({
+            "role": "system",
+            "content": f"""参考上下文：
+{content}
+"""
+        })
+
     def get_messages(self):
         return self.messages
