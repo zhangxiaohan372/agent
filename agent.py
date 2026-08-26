@@ -62,16 +62,22 @@ class Agent:
         return message
     def run_one_turn(self, user_input):
         # fix 直接让router决定要做什么，然后executor执行
+        print(f"[日志] 用户输入: {user_input}")
         # 1. router决定要做什么
         routes = self.router.route(user_input)
+        print(f"[日志] Router 路由: {routes}")
         # 2. executor执行
         context = self.executor.execute(routes)
+        print(f"[日志] Executor 上下文: {context}")
         # 3. 先注入参考上下文（system role），再添加用户问题
         self.message_manager.add_context_message(context)
         self.message_manager.add_user_message(user_input)
+        print("[日志] 已注入上下文和用户消息")
         # 4. 把执行结果交给LLM
         # todo 之后会可能改这里直接让llm接收参数
+        print("[日志] 开始调用 LLM")
         answer = self._call_llm()
+        print("[日志] LLM 调用完成")
         return answer
 
     def chat(self):
