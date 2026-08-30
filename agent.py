@@ -6,7 +6,7 @@ import os
 from message_manager import MessageManager
 from prompt_manager import PromptManager
 from tool_manager import ToolManager
-from memory import MemoryManager, EmbeddingManager
+from memory import MemoryManager
 from knowledge import KnowledgeManager
 from router import Router
 from executor import AgentExecutor
@@ -31,9 +31,6 @@ class Agent:
         self.tool_manager = ToolManager()
         # 4. Memory
         self.memory_manager = MemoryManager()
-        self.embedding_manager = EmbeddingManager()
-        # 加上记忆提取器放到大模型里
-        self.memory_extraction_prompt = self.prompt_manager.get_memory_extraction_prompt()
         # 5. Knowledge
         self.knowledge_manager = KnowledgeManager("knowledge_document/rag-test-document.md")
         # 6. executor
@@ -60,6 +57,13 @@ class Agent:
             message = self._call_llm()
             self.message_manager.add_assistant_message(message)
         return message
+
+    def build_context(self, context):
+        self.message_manager.add_context_message(context)
+
+    def generate(self):
+        return self._call_llm()
+
     def run_one_turn(self, user_input):
         # fix 直接让router决定要做什么，然后executor执行
         print(f"[日志] 用户输入: {user_input}")
@@ -69,14 +73,14 @@ class Agent:
         # 2. executor执行
         context = self.executor.execute(routes)
         print(f"[日志] Executor 上下文: {context}")
-        # 3. 先注入参考上下文（system role），再添加用户问题
-        self.message_manager.add_context_message(context)
+        # 3. 组装上下文并添加用户问题
+        self.build_context(context)
         self.message_manager.add_user_message(user_input)
         print("[日志] 已注入上下文和用户消息")
         # 4. 把执行结果交给LLM
         # todo 之后会可能改这里直接让llm接收参数
         print("[日志] 开始调用 LLM")
-        answer = self._call_llm()
+        answer = self.generate()
         print("[日志] LLM 调用完成")
         return answer
 

@@ -1,5 +1,9 @@
+# role 把 Executor 收成真正的执行中心
+
 class AgentExecutor:
+
     def __init__(
+
         self,
         memory_manager,
         knowledge_manager,
@@ -9,28 +13,78 @@ class AgentExecutor:
         self.knowledge_manager = knowledge_manager
         self.tool_manager = tool_manager
 
-    def execute(self,routes):
+    def execute(self, routes):
 
         results = []
-
         for route in routes:
-
             route_type = route.get("type")
-
+            query = route.get("query", "")
             if route_type == "MEMORY_SEARCH":
-                result = self.memory_manager.search(
-                    route["query"]
-                )
-                results.append(result)
-            
+                raw = self.memory_manager.search(query)
+                results.append(self._format_memory_search(raw))
+
             elif route_type == "KNOWLEDGE_SEARCH":
-                result = self.knowledge_manager.search(
-                    route["query"]
-                )
-                results.append(result)
-            
+                raw = self.knowledge_manager.search(query)
+                results.append(self._format_knowledge_search(raw))
+
             elif route_type == "MEMORY_WRITE":
-                result = self.memory_manager.save(route["query"])
-                results.append(result)
-            
-            return results
+                category = "preference"
+                importance = 7
+                embedding = self.memory_manager.embedding_manager.embed(query)
+                self.memory_manager.save(query, category, importance, embedding)
+                results.append({
+                    "type": "MEMORY_WRITE",
+                    "content": f"已保存 [{category}|重要度{importance}] {query}"
+                })
+
+            elif route_type == "CHAT":
+                results.append({
+                    "type": "CHAT",
+                    "content": ""
+                })
+
+        return results
+
+
+
+    def _format_memory_search(self, rows):
+        if not rows:
+            return {
+                "type": "MEMORY_SEARCH",
+                "content": "未找到相关记忆。"
+            }
+        lines = []
+
+        for row in rows:
+            content = row[1]
+            category = row[2]
+            importance = row[3]
+            lines.append(f"- [{category}|重要度{importance}] {content}")
+
+        return {
+            "type": "MEMORY_SEARCH",
+            "content": "\n".join(lines)
+
+        }
+
+    def _format_knowledge_search(self, chunks):
+        if not chunks:
+            return {
+                "type": "KNOWLEDGE_SEARCH",
+                "content": "未找到相关知识。"
+            }
+
+        lines = []
+
+        for chunk in chunks:
+            lines.append(
+                f"- [{chunk['source']}|相似度{chunk['score']:.4f}] {chunk['content']}"
+
+            )
+
+        return {
+            "type": "KNOWLEDGE_SEARCH",
+            "content": "\n".join(lines)
+        }
+
+

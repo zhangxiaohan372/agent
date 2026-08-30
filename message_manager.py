@@ -50,14 +50,24 @@ class MessageManager:
             "content": "以下是与当前问题相关的知识库内容，请结合这些信息回答用户：\n" + "\n".join(lines)
         })
 
-    def add_context_message(self, content):
-        if not content:
+    def add_context_message(self, context_list):
+        if not context_list:
             return
+
+        useful = [
+            item for item in context_list
+            if item.get("content")
+        ]
+        if not useful:
+            return
+
+        lines = []
+        for item in useful:
+            lines.append(f"【{item['type']}】\n{item['content']}")
+
         self.messages.append({
             "role": "system",
-            "content": f"""参考上下文：
-{content}
-"""
+            "content": "参考上下文：\n\n" + "\n\n".join(lines)
         })
 
     def get_messages(self):
