@@ -1,6 +1,7 @@
 class DocumentLoader:
 
     def load(self,path):
+        path = str(path)
         suffix = path.split('.')[-1]
 
         if suffix in ['md','txt','doc','docx']:

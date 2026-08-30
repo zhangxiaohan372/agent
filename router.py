@@ -15,7 +15,7 @@ class Router:
         self.prompt = prompt
         self.model = model
         
-    def route(self,user_input):
+    def route(self,messages):
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -23,10 +23,7 @@ class Router:
                     "role":"system",
                     "content":self.prompt
                 },
-                {
-                    "role":"user",
-                    "content":user_input
-                }
+                *messages
             ]
         )
         content = response.choices[0].message.content.strip()
@@ -38,7 +35,7 @@ class Router:
                 {
                     "type":"CHAT",
                     "priority":1,
-                    "query":user_input
+                    "query":messages
                 }
             ]
 
@@ -55,13 +52,13 @@ class Router:
             valid_routes.append(
                 {
                     "type": route_type,
-                    "query": route.get("query", user_input),
+                    "query": route.get("query", messages),
                     "priority": route.get("priority", 1),
                 }
             )
         # 没有合法的route
         if not valid_routes:
-            return [{"type": "CHAT", "priority": 1, "query": user_input}]
+            return [{"type": "CHAT", "priority": 1, "query": messages}]
 
         # 如果存在其他能力，则删除CHAT
         has_non_chat = any(route["type"] != "CHAT" for route in valid_routes)

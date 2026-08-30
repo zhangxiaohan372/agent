@@ -2,16 +2,9 @@
 
 class AgentExecutor:
 
-    def __init__(
-
-        self,
-        memory_manager,
-        knowledge_manager,
-        tool_manager
-    ):
+    def __init__(self, memory_manager, knowledge_manager):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
-        self.tool_manager = tool_manager
 
     def execute(self, routes):
 

@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from openai import OpenAI
@@ -10,19 +11,19 @@ from memory import MemoryManager
 from knowledge import KnowledgeManager
 from router import Router
 from executor import AgentExecutor
+
+
 class Agent:
     def __init__(self):
         # 1. openai客户端
         self.client = OpenAI(
-            base_url="https://api.deepseek.com/v1",
-            api_key=os.getenv("OPENAI_API_KEY")
+            base_url="https://api.deepseek.com/v1", api_key=os.getenv("OPENAI_API_KEY")
         )
-        # 2. messages
+        # 2. messages && router
         self.message_manager = MessageManager()
         self.prompt_manager = PromptManager()
-        self.message_manager.add_system_message(
-            self.prompt_manager.get_system_prompt()
-        )
+        # 将提示词加入到messages中
+        self.message_manager.add_system_message(self.prompt_manager.get_system_prompt())
         self.router = Router(
             client=self.client,
             prompt=self.prompt_manager.get_router_prompt(),
@@ -32,28 +33,37 @@ class Agent:
         # 4. Memory
         self.memory_manager = MemoryManager()
         # 5. Knowledge
-        self.knowledge_manager = KnowledgeManager("knowledge_document/rag-test-document.md")
+        self.knowledge_manager = KnowledgeManager(
+            "knowledge_document/rag-test-document.md"
+        )
         # 6. executor
         self.executor = AgentExecutor(
             memory_manager=self.memory_manager,
             knowledge_manager=self.knowledge_manager,
-            tool_manager=self.tool_manager
         )
+
     # 封装调用大模型的过程
     def _call_llm(self):
         messages = self.message_manager.get_messages().copy()
         response = self.client.chat.completions.create(
-            model="deepseek-v4-pro",
-            messages=messages,
-            tools=self.tool_manager.tools
+            model="deepseek-v4-pro", messages=messages, tools=self.tool_manager.tools
         )
         return response.choices[0].message
-    # 调用工具的过程需要循环调用大模型，直到没有工具调用为止，因此封装成一个函数
-    def _handle_tool_call(self,message):
+
+    # LLM 返回 tool_calls 时 “循环”：执行工具 → 回传结果 → 再调 LLM，直到不再调用工具
+    def _handle_tool_call(self, message, max_rounds=5):
+        rounds = 0
         while message.tool_calls:
+            rounds += 1
+            if rounds > max_rounds:
+                print("[日志] 工具调用次数已达上限，停止循环")
+                break
             for tool_call in message.tool_calls:
-                result = self.tool_manager.execute_tool_call(tool_call)
-                self.message_manager.add_tool_message(result)
+                print(
+                    f"[日志] 调用工具: {tool_call.function.name}({tool_call.function.arguments})"
+                )
+                tool_message = self.tool_manager.execute_tool_call(tool_call)
+                self.message_manager.add_tool_message(tool_message)
             message = self._call_llm()
             self.message_manager.add_assistant_message(message)
         return message
@@ -62,23 +72,31 @@ class Agent:
         self.message_manager.add_context_message(context)
 
     def generate(self):
-        return self._call_llm()
-
-    def run_one_turn(self, user_input):
-        # fix 直接让router决定要做什么，然后executor执行
+        message = self._call_llm()
+        self.message_manager.add_assistant_message(message)
+        return self._handle_tool_call(message)
+    def _is_ready_to_chat(self, routes):
+        if not routes:
+            return True
+        return all(route.get("type") == "CHAT" for route in routes)
+    # fix 加入agentloop
+    def run_one_turn(self, user_input, max_steps=3):
         print(f"[日志] 用户输入: {user_input}")
-        # 1. router决定要做什么
-        routes = self.router.route(user_input)
-        print(f"[日志] Router 路由: {routes}")
-        # 2. executor执行
-        context = self.executor.execute(routes)
-        print(f"[日志] Executor 上下文: {context}")
-        # 3. 组装上下文并添加用户问题
-        self.build_context(context)
+        # 1. 先把用户消息加入历史
         self.message_manager.add_user_message(user_input)
-        print("[日志] 已注入上下文和用户消息")
-        # 4. 把执行结果交给LLM
-        # todo 之后会可能改这里直接让llm接收参数
+        for step in range(max_steps):
+            print(f"[日志] Agent 第 {step} 步")
+            # 2. Router 基于完整 messages 决策
+            routes = self.router.route(self.message_manager.get_messages())
+            print(f"[日志] Router 路由: {routes}")
+            if self._is_ready_to_chat(routes):
+                print("[日志] 路由为 CHAT，结束多步执行")
+                break
+            context = self.executor.execute(routes)
+            print(f"[日志] Executor 上下文: {context}")
+            self.build_context(context)
+            print("[日志] 已注入上下文")
+
         print("[日志] 开始调用 LLM")
         answer = self.generate()
         print("[日志] LLM 调用完成")
@@ -91,6 +109,7 @@ class Agent:
                 break
             reply = self.run_one_turn(user_input)
             print(reply.content)
+
 
 agent = Agent()
 agent.chat()

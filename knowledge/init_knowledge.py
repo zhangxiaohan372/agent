@@ -87,6 +87,23 @@ class InitKnowledge:
         )
         return document_id
 
+    def find_document_id(self, source):
+        create_tables()
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT id FROM knowledge_documents WHERE source = ?",
+            (source,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        return row[0] if row else None
+
     def ingest_file(self, file_path):
+        file_path = str(file_path)
+        existing_id = self.find_document_id(file_path)
+        if existing_id is not None:
+            return existing_id
         text = self.document_loader.load(file_path)
         return self.ingest_text(text, file_path, title=Path(file_path).name)

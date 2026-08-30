@@ -16,7 +16,23 @@ class MessageManager:
         })
     
     def add_assistant_message(self, message):
-        self.messages.append(message)
+        msg = {
+            "role": "assistant",
+            "content": message.content or "",
+        }
+        if message.tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tool_call.id,
+                    "type": tool_call.type,
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+                for tool_call in message.tool_calls
+            ]
+        self.messages.append(msg)
     
     def add_tool_message(self, message):
         self.messages.append(message)
