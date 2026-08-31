@@ -6,7 +6,7 @@ class AgentState:
         # Router 的决策结果
         self.routes = []
 
-        # Executor 执行 Tool 后的结果
+        # Executor 本轮执行结果（记忆 / 知识库 / 工具）
         self.tool_results = []
 
         # 当前 Agent 执行了多少步

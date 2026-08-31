@@ -11,6 +11,7 @@ from memory import MemoryManager
 from knowledge import KnowledgeManager
 from router import Router
 from executor import AgentExecutor
+from state import AgentState
 
 
 class Agent:
@@ -68,26 +69,30 @@ class Agent:
         return all(route.get("type") == "CHAT" for route in routes)
     # fix:加入agentloop
     def run_one_turn(self, user_input, max_steps=3):
-        print(f"[日志] 用户输入: {user_input}")
-        # 1. 先把用户消息加入历史
-        self.message_manager.add_user_message(user_input)
-        for step in range(max_steps):
-            print(f"[日志] Agent 第 {step + 1} 步")
-            # 2. Router 基于完整 messages 决策
-            routes = self.router.route(self.message_manager.get_messages())
-            print(f"[日志] Router 路由: {routes}")
-            if self._is_ready_to_chat(routes):
+        state = AgentState(user_input)
+        print(f"[日志] 用户输入: {state.user_input}")
+        self.message_manager.add_user_message(state.user_input)
+
+        for _ in range(max_steps):
+            state.step += 1
+            print(f"[日志] Agent 第 {state.step} 步")
+            state.routes = self.router.route(self.message_manager.get_messages())
+            print(f"[日志] Router 路由: {state.routes}")
+            if self._is_ready_to_chat(state.routes):
+                state.finished = True
                 print("[日志] 路由为 CHAT，结束多步执行")
                 break
-            context = self.executor.execute(routes)
+            context = self.executor.execute(state.routes)
+            state.tool_results.extend(context)
             print(f"[日志] Executor 上下文: {context}")
             self.build_context(context)
             print("[日志] 已注入上下文")
 
         print("[日志] 开始调用 LLM")
-        answer = self.generate()
+        state.final_answer = self.generate()
+        state.finished = True
         print("[日志] LLM 调用完成")
-        return answer
+        return state.final_answer
 
     def chat(self):
         while True:
