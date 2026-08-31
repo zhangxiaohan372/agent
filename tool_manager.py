@@ -77,3 +77,14 @@ class ToolManager:
                 "parameters":parameters
             }
         })
+
+    def describe_for_router(self):
+        lines = []
+        for tool in self.tools:
+            fn = tool["function"]
+            name = fn["name"]
+            desc = fn["description"]
+            params = fn.get("parameters", {})
+            lines.append(f"- {name}: {desc}")
+            lines.append(f"  args 参数: {json.dumps(params, ensure_ascii=False)}")
+        return "\n".join(lines)

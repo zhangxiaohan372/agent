@@ -11,12 +11,9 @@ class PromptManager:
         结合系统注入的记忆、知识库上下文作答。
         需要实时信息时，调用可用工具获取，不要编造。
 
-        工具使用规则：
-
-        涉及天气时，调用 get_current_weather。
-        涉及当前时间时，调用 get_current_time。
-        工具返回结果后再组织最终回答。
-        没有工具结果时，不要假装已经查询过。
+        需要实时信息时，结合系统注入的【TOOL】、【MEMORY_SEARCH】、【KNOWLEDGE_SEARCH】上下文作答。
+         不要编造天气、时间等实时信息。
+         没有对应上下文时，如实说明缺少信息。
 
         输出：
 
@@ -89,7 +86,7 @@ class PromptManager:
         如果没有长期信息，只输出：NONE
         """
 
-    def get_router_prompt(self):
+    def get_router_prompt(self, tool_list):
 
         return """
 
@@ -123,18 +120,23 @@ class PromptManager:
          - 普通聊天
          - 不需要调用其他能力
 
-
-         返回格式：
-
-         {
-            "routes":[
-               {
-                     "type":"能力名称",
-                     "query":"执行该能力需要查询的内容",
-                     "priority":优先级数字
-               }
-            ]
-         }
+         6. TOOL
+         用途：需要调用实时工具时使用。
+         只能使用下面列出的工具，不要编造工具名。
+         {tool_list}
+         TOOL 返回格式：
+         {{
+            "type": "TOOL",
+            "name": "工具名",
+            "args": {{}},
+            "priority": 1
+         }}
+         规则：
+         - name 必须是列表中的工具。
+         - args 必须符合该工具的参数定义。
+         - 上下文里已有【TOOL】同一工具的结果，不要重复调用。
+         - 缺参数（例如天气缺城市）可先 MEMORY_SEARCH，再 TOOL。
+         - 信息足够后返回 CHAT。
 
 
          规则：
@@ -180,4 +182,4 @@ class PromptManager:
          4. 如果用户表达了需要长期保存的信息，返回 MEMORY_WRITE。
          5. 不要重复调用已经完成且结果足够的能力。
          6. 如果上一次 MEMORY_SEARCH 或 KNOWLEDGE_SEARCH 已经返回了相关内容，不要再次调用相同能力，除非用户问题需要更精确的新查询。
-      """
+      """.format(tool_list=tool_list) or "当前没用可用工具"

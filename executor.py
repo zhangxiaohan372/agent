@@ -1,10 +1,11 @@
 # role 把 Executor 收成真正的执行中心
 
-class AgentExecutor:
 
-    def __init__(self, memory_manager, knowledge_manager):
+class AgentExecutor:
+    def __init__(self, memory_manager, knowledge_manager, tool_manager):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
+        self.tool_manager = tool_manager
 
     def execute(self, routes):
 
@@ -25,27 +26,29 @@ class AgentExecutor:
                 importance = 7
                 embedding = self.memory_manager.embedding_manager.embed(query)
                 self.memory_manager.save(query, category, importance, embedding)
-                results.append({
-                    "type": "MEMORY_WRITE",
-                    "content": f"已保存 [{category}|重要度{importance}] {query}"
-                })
-
+                results.append(
+                    {
+                        "type": "MEMORY_WRITE",
+                        "content": f"已保存 [{category}|重要度{importance}] {query}",
+                    }
+                )
+            elif route_type == "TOOL":
+                tool_name = route.get("name")
+                tool_args = route.get("args") or {}
+                fn = self.tool_manager.available_functions.get(tool_name)
+                if fn is None:
+                    content = f"未知工具: {tool_name}"
+                else:
+                    content = str(fn(**tool_args))
+                results.append({"type": "TOOL", "content": f"{tool_name}: {content}"})
             elif route_type == "CHAT":
-                results.append({
-                    "type": "CHAT",
-                    "content": ""
-                })
+                results.append({"type": "CHAT", "content": ""})
 
         return results
 
-
-
     def _format_memory_search(self, rows):
         if not rows:
-            return {
-                "type": "MEMORY_SEARCH",
-                "content": "未找到相关记忆。"
-            }
+            return {"type": "MEMORY_SEARCH", "content": "未找到相关记忆。"}
         lines = []
 
         for row in rows:
@@ -54,30 +57,17 @@ class AgentExecutor:
             importance = row[3]
             lines.append(f"- [{category}|重要度{importance}] {content}")
 
-        return {
-            "type": "MEMORY_SEARCH",
-            "content": "\n".join(lines)
-
-        }
+        return {"type": "MEMORY_SEARCH", "content": "\n".join(lines)}
 
     def _format_knowledge_search(self, chunks):
         if not chunks:
-            return {
-                "type": "KNOWLEDGE_SEARCH",
-                "content": "未找到相关知识。"
-            }
+            return {"type": "KNOWLEDGE_SEARCH", "content": "未找到相关知识。"}
 
         lines = []
 
         for chunk in chunks:
             lines.append(
                 f"- [{chunk['source']}|相似度{chunk['score']:.4f}] {chunk['content']}"
-
             )
 
-        return {
-            "type": "KNOWLEDGE_SEARCH",
-            "content": "\n".join(lines)
-        }
-
-
+        return {"type": "KNOWLEDGE_SEARCH", "content": "\n".join(lines)}

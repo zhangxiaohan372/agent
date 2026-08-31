@@ -19,17 +19,21 @@ class Agent:
         self.client = OpenAI(
             base_url="https://api.deepseek.com/v1", api_key=os.getenv("OPENAI_API_KEY")
         )
-        # 2. messages && router
+        # 2. tools
+        self.tool_manager = ToolManager()
+
+        # 3. messages && router
         self.message_manager = MessageManager()
         self.prompt_manager = PromptManager()
         # 将提示词加入到messages中
         self.message_manager.add_system_message(self.prompt_manager.get_system_prompt())
         self.router = Router(
             client=self.client,
-            prompt=self.prompt_manager.get_router_prompt(),
+            prompt=self.prompt_manager.get_router_prompt(
+                tool_list = self.tool_manager.describe_for_router()
+            ),
         )
-        # 3. tools
-        self.tool_manager = ToolManager()
+        
         # 4. Memory
         self.memory_manager = MemoryManager()
         # 5. Knowledge
@@ -40,33 +44,16 @@ class Agent:
         self.executor = AgentExecutor(
             memory_manager=self.memory_manager,
             knowledge_manager=self.knowledge_manager,
+            tool_manager=self.tool_manager,
         )
 
     # 封装调用大模型的过程
     def _call_llm(self):
         messages = self.message_manager.get_messages().copy()
         response = self.client.chat.completions.create(
-            model="deepseek-v4-pro", messages=messages, tools=self.tool_manager.tools
+            model="deepseek-v4-pro", messages=messages
         )
         return response.choices[0].message
-
-    # LLM 返回 tool_calls 时 “循环”：执行工具 → 回传结果 → 再调 LLM，直到不再调用工具
-    def _handle_tool_call(self, message, max_rounds=5):
-        rounds = 0
-        while message.tool_calls:
-            rounds += 1
-            if rounds > max_rounds:
-                print("[日志] 工具调用次数已达上限，停止循环")
-                break
-            for tool_call in message.tool_calls:
-                print(
-                    f"[日志] 调用工具: {tool_call.function.name}({tool_call.function.arguments})"
-                )
-                tool_message = self.tool_manager.execute_tool_call(tool_call)
-                self.message_manager.add_tool_message(tool_message)
-            message = self._call_llm()
-            self.message_manager.add_assistant_message(message)
-        return message
 
     def build_context(self, context):
         self.message_manager.add_context_message(context)
@@ -74,18 +61,18 @@ class Agent:
     def generate(self):
         message = self._call_llm()
         self.message_manager.add_assistant_message(message)
-        return self._handle_tool_call(message)
+        return message
     def _is_ready_to_chat(self, routes):
         if not routes:
             return True
         return all(route.get("type") == "CHAT" for route in routes)
-    # fix 加入agentloop
+    # fix:加入agentloop
     def run_one_turn(self, user_input, max_steps=3):
         print(f"[日志] 用户输入: {user_input}")
         # 1. 先把用户消息加入历史
         self.message_manager.add_user_message(user_input)
         for step in range(max_steps):
-            print(f"[日志] Agent 第 {step} 步")
+            print(f"[日志] Agent 第 {step + 1} 步")
             # 2. Router 基于完整 messages 决策
             routes = self.router.route(self.message_manager.get_messages())
             print(f"[日志] Router 路由: {routes}")

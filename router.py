@@ -7,6 +7,7 @@ class Router:
         "MEMORY_SEARCH",
         "KNOWLEDGE_SEARCH",
         "KNOWLEDGE_INGEST",
+        "TOOL",
         "CHAT",
     }
     
@@ -15,7 +16,13 @@ class Router:
         self.prompt = prompt
         self.model = model
         
-    def route(self,messages):
+    def route(self, messages):
+        user_input = ""
+        for message in reversed(messages):
+            if message.get("role") == "user":
+                user_input = message.get("content", "")
+                break
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -35,7 +42,7 @@ class Router:
                 {
                     "type":"CHAT",
                     "priority":1,
-                    "query":messages
+                    "query": user_input,
                 }
             ]
 
@@ -52,13 +59,15 @@ class Router:
             valid_routes.append(
                 {
                     "type": route_type,
-                    "query": route.get("query", messages),
+                    "query": route.get("query", user_input),
                     "priority": route.get("priority", 1),
+                    "name": route.get("name") or route.get("tool_name"),
+                    "args": route.get("args") or route.get("tool_args") or {},
                 }
             )
         # 没有合法的route
         if not valid_routes:
-            return [{"type": "CHAT", "priority": 1, "query": messages}]
+            return [{"type": "CHAT", "priority": 1, "query": user_input}]
 
         # 如果存在其他能力，则删除CHAT
         has_non_chat = any(route["type"] != "CHAT" for route in valid_routes)
