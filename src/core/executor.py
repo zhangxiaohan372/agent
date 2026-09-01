@@ -1,6 +1,3 @@
-# role 把 Executor 收成真正的执行中心
-
-
 class AgentExecutor:
     def __init__(self, memory_manager, knowledge_manager, tool_manager):
         self.memory_manager = memory_manager
@@ -8,7 +5,6 @@ class AgentExecutor:
         self.tool_manager = tool_manager
 
     def execute(self, routes):
-
         results = []
         for route in routes:
             route_type = route.get("type")

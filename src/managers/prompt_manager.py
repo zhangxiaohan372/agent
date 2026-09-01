@@ -88,7 +88,8 @@ class PromptManager:
 
     def get_router_prompt(self, tool_list):
 
-        return """
+        return (
+            """
 
          你是一个 Agent 路由器。
 
@@ -153,15 +154,15 @@ class PromptManager:
 
          5. 如果只是普通聊天：
 
-         {
+         {{
             "routes":[
-               {
-                     "type":"CHAT",
-                     "query":"用户问题",
-                     "priority":1
-               }
+               {{
+                  "type":"CHAT",
+                  "query":"用户问题",
+                  "priority":1
+               }}
             ]
-         }
+         }}
 
 
          你将看到完整对话历史，其中可能包含系统注入的上下文，例如：
@@ -182,4 +183,56 @@ class PromptManager:
          4. 如果用户表达了需要长期保存的信息，返回 MEMORY_WRITE。
          5. 不要重复调用已经完成且结果足够的能力。
          6. 如果上一次 MEMORY_SEARCH 或 KNOWLEDGE_SEARCH 已经返回了相关内容，不要再次调用相同能力，除非用户问题需要更精确的新查询。
-      """.format(tool_list=tool_list) or "当前没用可用工具"
+
+         7. 涉及用户个人信息、偏好、历史时，必须先 MEMORY_SEARCH，不能直接 CHAT。
+         8. 涉及天气、时间等实时信息时，必须先 TOOL；天气缺城市时先 MEMORY_SEARCH 再 TOOL。
+         9. 用户陈述「我喜欢…」「我住在…」「我是…」等长期信息时，返回 MEMORY_WRITE，不要 CHAT。
+
+         路由示例（必须参考）：
+
+         用户：你好
+         {{
+            "routes":[{{"type":"CHAT","query":"用户问候","priority":1}}]
+         }}
+
+         用户：你知道我喜欢什么吗
+         {{
+            "routes":[{{"type":"MEMORY_SEARCH","query":"用户兴趣爱好和偏好","priority":1}}]
+         }}
+
+         用户：今天天气怎么样
+         （上下文尚无【MEMORY_SEARCH】和【TOOL】）
+         {{
+            "routes":[{{"type":"MEMORY_SEARCH","query":"用户常住地或所在城市","priority":1}}]
+         }}
+
+         用户：今天天气怎么样
+         （上下文已有【MEMORY_SEARCH】，其中包含用户城市）
+         {{
+            "routes":[{{"type":"TOOL","name":"get_current_weather","args":{{"location":"北京"}},"priority":1}}]
+         }}
+
+         用户：现在几点了
+         {{
+            "routes":[{{"type":"TOOL","name":"get_current_time","args":{{}},"priority":1}}]
+         }}
+
+         用户：我喜欢 Python
+         {{
+            "routes":[{{"type":"MEMORY_WRITE","query":"用户喜欢 Python","priority":1}}]
+         }}
+
+         用户：星澜咖啡几点开门
+         （上下文尚无【KNOWLEDGE_SEARCH】）
+         {{
+            "routes":[{{"type":"KNOWLEDGE_SEARCH","query":"星澜咖啡 营业时间 开门时间","priority":1}}]
+         }}
+
+         用户：星澜咖啡几点开门
+         （上下文已有【KNOWLEDGE_SEARCH】且信息足够）
+         {{
+            "routes":[{{"type":"CHAT","query":"星澜咖啡几点开门","priority":1}}]
+         }}
+      """.format(tool_list=tool_list)
+            or "当前没用可用工具"
+        )

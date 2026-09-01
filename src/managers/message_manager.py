@@ -1,20 +1,13 @@
 class MessageManager:
-    
     def __init__(self):
         self.messages = []
 
     def add_system_message(self, content):
-        self.messages.append({
-            "role": "system",
-            "content": content
-        })
+        self.messages.append({"role": "system", "content": content})
 
     def add_user_message(self, content):
-        self.messages.append({
-            "role": "user",
-            "content": content
-        })
-    
+        self.messages.append({"role": "user", "content": content})
+
     def add_assistant_message(self, message):
         msg = {
             "role": "assistant",
@@ -33,7 +26,7 @@ class MessageManager:
                 for tool_call in message.tool_calls
             ]
         self.messages.append(msg)
-    
+
     def add_tool_message(self, message):
         self.messages.append(message)
 
@@ -42,15 +35,17 @@ class MessageManager:
             return
         lines = []
         for row in memory_list:
-            # row: id, content, category, importance, embedding
             content = row[1]
             category = row[2]
             importance = row[3]
             lines.append(f"- [{category}|重要度{importance}] {content}")
-        self.messages.append({
-            "role": "system",
-            "content": "以下是与当前问题相关的长期记忆，请结合这些信息回答用户：\n" + "\n".join(lines)
-        })
+        self.messages.append(
+            {
+                "role": "system",
+                "content": "以下是与当前问题相关的长期记忆，请结合这些信息回答用户：\n"
+                + "\n".join(lines),
+            }
+        )
 
     def add_knowledge_message(self, knowledge_list):
         if not knowledge_list:
@@ -61,19 +56,19 @@ class MessageManager:
             source = row["source"]
             score = row["score"]
             lines.append(f"- [{source}|相似度{score:.4f}] {content}")
-        self.messages.append({
-            "role": "system",
-            "content": "以下是与当前问题相关的知识库内容，请结合这些信息回答用户：\n" + "\n".join(lines)
-        })
+        self.messages.append(
+            {
+                "role": "system",
+                "content": "以下是与当前问题相关的知识库内容，请结合这些信息回答用户：\n"
+                + "\n".join(lines),
+            }
+        )
 
     def add_context_message(self, context_list):
         if not context_list:
             return
 
-        useful = [
-            item for item in context_list
-            if item.get("content")
-        ]
+        useful = [item for item in context_list if item.get("content")]
         if not useful:
             return
 
@@ -81,10 +76,12 @@ class MessageManager:
         for item in useful:
             lines.append(f"【{item['type']}】\n{item['content']}")
 
-        self.messages.append({
-            "role": "system",
-            "content": "参考上下文：\n\n" + "\n\n".join(lines)
-        })
+        self.messages.append(
+            {
+                "role": "system",
+                "content": "参考上下文：\n\n" + "\n\n".join(lines),
+            }
+        )
 
     def get_messages(self):
         return self.messages

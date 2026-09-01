@@ -1,7 +1,4 @@
-try:
-    from database.database import DATABASE_PATH, get_connection
-except ImportError:
-    from database import DATABASE_PATH, get_connection
+from database.database import DATABASE_PATH, get_connection
 
 
 def create_tables():

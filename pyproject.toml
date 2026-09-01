@@ -1,3 +1,18 @@
+[project]
+name = "agent"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "openai",
+    "python-dotenv",
+    "dashscope",
+]
+
+[tool.pyright]
+extraPaths = ["src"]
+
 [tool.ruff]
 target-version = "py314"
 line-length = 88
