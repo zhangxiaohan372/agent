@@ -6,10 +6,12 @@ from fastapi.responses import StreamingResponse
 from api.schemas import ChatRequest
 from api.session import get_agent
 
+# 创建一个子路由实例
 router = APIRouter()
 
 
 @router.post("/chat/stream")
+# req: ChatRequest 是 FastAPI 中用来接收并校验客户端传参（请求体）的语法。
 def chat_stream(req: ChatRequest):
     agent = get_agent(req.session_id)
 

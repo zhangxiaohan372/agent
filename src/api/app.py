@@ -13,6 +13,7 @@ from api.routes.chat import router as chat_router
 app = FastAPI(title="Agent API")
 app.add_middleware(
     CORSMiddleware,
+    # 跨域三要素:请求头，请求方法，域名
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
