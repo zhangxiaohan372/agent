@@ -16,6 +16,43 @@ class Router:
         self.prompt = prompt
         self.model = model
 
+    def _build_router_messages(self, messages, history_limit=6):
+        """保留近期对话语义，同时隔离业务 system prompt 和旧工具上下文。"""
+        last_user_index = next(
+            (
+                index
+                for index in range(len(messages) - 1, -1, -1)
+                if messages[index].get("role") == "user"
+            ),
+            None,
+        )
+        if last_user_index is None:
+            return [{"role": "user", "content": "用户当前请求："}]
+
+        user_input = messages[last_user_index].get("content", "")
+        recent_dialogue = [
+            {
+                "role": message["role"],
+                "content": message.get("content", ""),
+            }
+            for message in messages[:last_user_index]
+            if message.get("role") in {"user", "assistant"}
+            and message.get("content")
+        ][-history_limit:]
+        current_context = [
+            message.get("content", "")
+            for message in messages[last_user_index + 1:]
+            if message.get("role") == "system" and message.get("content")
+        ]
+
+        content = f"用户当前请求：\n{user_input}"
+        if current_context:
+            content += "\n\n当前轮已获取的上下文：\n" + "\n\n".join(current_context)
+        return [
+            *recent_dialogue,
+            {"role": "user", "content": content},
+        ]
+
     def route(self, messages):
         user_input = ""
         for message in reversed(messages):
@@ -30,8 +67,10 @@ class Router:
                     "role": "system",
                     "content": self.prompt,
                 },
-                *messages,
+                *self._build_router_messages(messages),
             ],
+            response_format={"type": "json_object"},
+            temperature=0,
         )
         content = response.choices[0].message.content.strip()
         try:

@@ -78,5 +78,3 @@ class KnowledgeManager:
 
     def ingest_text(self, text, source="user_input", title=None):
         return self.init_knowledge.ingest_text(text, source=source, title=title)
-
-   
