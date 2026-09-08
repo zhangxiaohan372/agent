@@ -7,12 +7,11 @@ def create_tables():
     # 创建记忆表
     memory_sql = """
     CREATE TABLE IF NOT EXISTS memories(
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         content TEXT NOT NULL,
-         category TEXT NOT NULL,
-         importance INTEGER NOT NULL DEFAULT 0,
-         embedding TEXT,
-         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL,
+        importance INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """
     # 创建知识库表
@@ -27,12 +26,11 @@ def create_tables():
     # 知识分块表
     knowledge_sql = """
     CREATE TABLE IF NOT EXISTS knowledge_chunks(
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         document_id INTEGER NOT NULL,
-         content TEXT NOT NULL,
-         embedding TEXT,
-         source TEXT,
-         created_time DATETIME DEFAULT CURRENT_TIMESTAMP
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        source TEXT,
+        created_time DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """
     cursor.execute(memory_sql)

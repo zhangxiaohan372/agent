@@ -8,6 +8,7 @@ dependencies = [
     "openai",
     "python-dotenv",
     "dashscope",
+    "chromadb",
 ]
 
 [tool.pyright]

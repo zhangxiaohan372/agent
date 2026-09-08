@@ -14,13 +14,15 @@ from memory.embedding_manager import EmbeddingManager
 from pathlib import Path
 from database.init_db import create_tables
 from database.database import get_connection
-import json
-
+from database.vector_db import get_or_create_collection
+import uuid
 class InitKnowledge:
     def __init__(self):
         self.document_loader = DocumentLoader()
         self.chunker = Chunker()
         self.embedding_manager = EmbeddingManager()
+        # 获取知识库的collection
+        self.collection = get_or_create_collection("knowledge_chunks")
 
     # 创建知识库的id储存表更方便找到相应资料
     def create_document(self, title, source=None):
@@ -51,20 +53,40 @@ class InitKnowledge:
                 title=Path(str(source)).name or str(source),
                 source=source,
             )
+        # 1. 准备chroma所需的数据列表
+        
+        ids = []
+        metadatas = []
+        documents = []
+        
+        for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            # 每个chunk需要一个唯一的id
+            chunk_id = f"doc_{document_id}_chunk_{idx}_{uuid.uuid4().hex[:8]}"
+            ids.append(chunk_id)
+            documents.append(chunk)
+            # metadata 存储过滤字段（如所属文档ID、来源）
+            metadatas.append({"document_id": document_id, "source": source})
+            
+        # 2. 一次性批量写入chromaDB
+        self.collection.add(
+            ids=ids,
+            metadatas=metadatas,
+            documents=documents,
+            embeddings=embeddings
+        )
         create_tables()
         connection = get_connection()
         cursor = connection.cursor()
-        for chunk, embedding in zip(chunks, embeddings):
+        for chunk in chunks:
             cursor.execute(
                 """
                 INSERT INTO knowledge_chunks
-                    (document_id, content, embedding, source)
-                VALUES (?,?,?,?)
+                    (document_id, content, source)
+                VALUES (?,?,?)
                 """,
                 (
                     document_id,
                     chunk,
-                    json.dumps(embedding),
                     source,
                 ),
             )
