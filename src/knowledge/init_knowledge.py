@@ -125,7 +125,12 @@ class InitKnowledge:
     def ingest_file(self, file_path):
         file_path = str(file_path)
         existing_id = self.find_document_id(file_path)
-        if existing_id is not None:
+        if existing_id is not None and self.collection.count() > 0:
             return existing_id
         text = self.document_loader.load(file_path)
+        if existing_id is not None:
+            chunks = self.chunker.split(text)
+            embeddings = self.embed_chunks(chunks)
+            self.save_chunks(chunks, embeddings, source=file_path, document_id=existing_id)
+            return existing_id
         return self.ingest_text(text, file_path, title=Path(file_path).name)
