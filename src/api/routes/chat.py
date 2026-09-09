@@ -12,12 +12,12 @@ router = APIRouter()
 
 @router.post("/chat/stream")
 # req: ChatRequest 是 FastAPI 中用来接收并校验客户端传参（请求体）的语法。
-def chat_stream(req: ChatRequest):
+async def chat_stream(req: ChatRequest):
     agent = get_agent(req.session_id)
 
-    def event_stream():
+    async def event_stream():
         try:
-            for event in agent.run_one_turn_stream(req.message):
+            async for event in agent.run_one_turn_stream(req.message):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             payload = {"type": "error", "message": str(e)}

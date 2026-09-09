@@ -53,14 +53,15 @@ class Router:
             {"role": "user", "content": content},
         ]
 
-    def route(self, messages):
+    # route主线路   
+    async def route(self, messages):
         user_input = ""
         for message in reversed(messages):
             if message.get("role") == "user":
                 user_input = message.get("content", "")
                 break
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {

@@ -1,27 +1,34 @@
+import asyncio
+
+
 class AgentExecutor:
     def __init__(self, memory_manager, knowledge_manager, tool_manager):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
         self.tool_manager = tool_manager
 
-    def execute(self, routes):
+    async def execute(self, routes):
         results = []
         for route in routes:
             route_type = route.get("type")
             query = route.get("query", "")
             if route_type == "MEMORY_SEARCH":
-                raw = self.memory_manager.search(query)
+                raw = await asyncio.to_thread(self.memory_manager.search, query)
                 results.append(self._format_memory_search(raw))
 
             elif route_type == "KNOWLEDGE_SEARCH":
-                raw = self.knowledge_manager.search(query)
+                raw = await asyncio.to_thread(self.knowledge_manager.search, query)
                 results.append(self._format_knowledge_search(raw))
 
             elif route_type == "MEMORY_WRITE":
                 category = "preference"
                 importance = 7
-                embedding = self.memory_manager.embedding_manager.embed(query)
-                self.memory_manager.save(query, category, importance, embedding)
+                embedding = await asyncio.to_thread(
+                    self.memory_manager.embedding_manager.embed, query
+                )
+                await asyncio.to_thread(
+                    self.memory_manager.save, query, category, importance, embedding
+                )
                 results.append(
                     {
                         "type": "MEMORY_WRITE",
@@ -35,7 +42,7 @@ class AgentExecutor:
                 if fn is None:
                     content = f"未知工具: {tool_name}"
                 else:
-                    content = str(fn(**tool_args))
+                    content = str(await asyncio.to_thread(fn, **tool_args))
                 results.append({"type": "TOOL", "content": f"{tool_name}: {content}"})
             elif route_type == "CHAT":
                 results.append({"type": "CHAT", "content": ""})
