@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv",
     "dashscope",
     "chromadb",
+    "mcp",
 ]
 
 [tool.pyright]

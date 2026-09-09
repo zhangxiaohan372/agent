@@ -2,10 +2,11 @@ import asyncio
 
 
 class AgentExecutor:
-    def __init__(self, memory_manager, knowledge_manager, tool_manager):
+    def __init__(self, memory_manager, knowledge_manager, tool_manager, mcp_manager=None):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
         self.tool_manager = tool_manager
+        self.mcp_manager = mcp_manager
 
     async def execute(self, routes):
         results = []
@@ -38,11 +39,18 @@ class AgentExecutor:
             elif route_type == "TOOL":
                 tool_name = route.get("name")
                 tool_args = route.get("args") or {}
-                fn = self.tool_manager.available_functions.get(tool_name)
-                if fn is None:
-                    content = f"未知工具: {tool_name}"
+                # 优先判断是否是 MCP 注册的工具
+                if self.mcp_manager and tool_name in self.mcp_manager.tool_to_session:
+                    try:
+                        content = await self.mcp_manager.execute_tool(tool_name, tool_args)
+                    except Exception as e:
+                        content = f"MCP 工具执行失败: {e}"
                 else:
-                    content = str(await asyncio.to_thread(fn, **tool_args))
+                    fn = self.tool_manager.available_functions.get(tool_name)
+                    if fn is None:
+                        content = f"未知工具: {tool_name}"
+                    else:
+                        content = str(await asyncio.to_thread(fn, **tool_args))
                 results.append({"type": "TOOL", "content": f"{tool_name}: {content}"})
             elif route_type == "CHAT":
                 results.append({"type": "CHAT", "content": ""})

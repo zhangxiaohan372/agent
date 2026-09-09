@@ -20,6 +20,7 @@ from knowledge import KnowledgeManager
 from managers.message_manager import MessageManager
 from managers.prompt_manager import PromptManager
 from managers.tool_manager import ToolManager
+from managers.mcp_manager import MCPManager
 from memory import MemoryManager
 
 
@@ -30,6 +31,8 @@ class Agent:
             api_key=os.getenv("OPENAI_API_KEY"),
         )
         self.tool_manager = ToolManager()
+        self.mcp_manager = MCPManager()
+        self._mcp_initialized = False
 
         self.message_manager = MessageManager()
         self.prompt_manager = PromptManager()
@@ -49,6 +52,7 @@ class Agent:
             memory_manager=self.memory_manager,
             knowledge_manager=self.knowledge_manager,
             tool_manager=self.tool_manager,
+            mcp_manager=self.mcp_manager,
         )
 
     async def _call_llm(self):
@@ -84,7 +88,24 @@ class Agent:
             return True
         return all(route.get("type") == "CHAT" for route in routes)
 
+    async def init_mcp(self):
+        if self._mcp_initialized:
+            return
+        await self.mcp_manager.connect_all()
+        if self.mcp_manager.tools:
+            self.tool_manager.tools.extend(self.mcp_manager.tools)
+            self.router.prompt = self.prompt_manager.get_router_prompt(
+                tool_list=self.tool_manager.describe_for_router()
+            )
+        self._mcp_initialized = True
+
+    async def close(self):
+        await self.mcp_manager.close()
+
     async def run_one_turn_stream(self, user_input, max_steps=3):
+        if not self._mcp_initialized:
+            await self.init_mcp()
+
         state = AgentState(user_input)
         self.message_manager.add_user_message(user_input)
 
@@ -129,9 +150,18 @@ class Agent:
         print("[日志] LLM 调用完成")
         return "".join(chunks)
 
+    async def _async_chat(self):
+        try:
+            await self.init_mcp()
+            while True:
+                user_input = await asyncio.to_thread(input, "用户：")
+                if user_input.strip().lower() == "exit":
+                    break
+                if not user_input.strip():
+                    continue
+                await self.run_one_turn(user_input)
+        finally:
+            await self.close()
+
     def chat(self):
-        while True:
-            user_input = input("用户：")
-            if user_input.lower() == "exit":
-                break
-            asyncio.run(self.run_one_turn(user_input))
+        asyncio.run(self._async_chat())
