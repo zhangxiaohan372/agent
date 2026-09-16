@@ -1,8 +1,9 @@
 import json
 import math
-from contextlib import closing
 
-from database.database import get_connection
+from sqlalchemy import text
+
+from database.database import get_engine
 from .embedding_manager import EmbeddingManager
 
 
@@ -12,28 +13,44 @@ class MemoryManager:
 
     def save(self, memory, category, importance, embedding=None):
         embedding_str = json.dumps(embedding) if embedding is not None else None
-        with closing(get_connection()) as connection:
+        with get_engine().begin() as connection:
             connection.execute(
-                "INSERT INTO memories (content, category, importance, embedding) VALUES (?, ?, ?, ?)",
-                (memory, category, importance, embedding_str),
+                text(
+                    """
+                    INSERT INTO memories (content, category, importance, embedding)
+                    VALUES (:content, :category, :importance, :embedding)
+                    """
+                ),
+                {
+                    "content": memory,
+                    "category": category,
+                    "importance": importance,
+                    "embedding": embedding_str,
+                },
             )
-            connection.commit()
 
     def search(self, query, top_k=5):
         #给设置搜索词进行向量转换，获取向量值
         query_embedding = self.embedding_manager.embed(query)
-        with closing(get_connection()) as connection:
+        with get_engine().connect() as connection:
             rows = connection.execute(
-                """
+                text(
+                    """
                 SELECT id,content,category,importance,embedding
                 FROM memories
                 WHERE embedding IS NOT NULL
                 """
+                )
             ).fetchall()
         # 获取所有memory的数据
         scored = []
         for row in rows:
-            memory_embedding = json.loads(row[4])
+            stored_embedding = row[4]
+            memory_embedding = (
+                json.loads(stored_embedding)
+                if isinstance(stored_embedding, str)
+                else stored_embedding
+            )
 
             score = self._cosine_similarity(query_embedding, memory_embedding)
             scored.append((score,row))
@@ -49,8 +66,8 @@ class MemoryManager:
         ]
 
     def get_all(self):
-        with closing(get_connection()) as connection:
-            return connection.execute("SELECT * FROM memories").fetchall()
+        with get_engine().connect() as connection:
+            return connection.execute(text("SELECT * FROM memories")).fetchall()
 
     def close(self):
         """Retained for callers; database connections are scoped per operation."""

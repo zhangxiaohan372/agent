@@ -12,8 +12,9 @@ from .document_loader import DocumentLoader
 from .chunker import Chunker
 from memory.embedding_manager import EmbeddingManager
 from pathlib import Path
+from sqlalchemy import text
 from database.init_db import create_tables
-from database.database import get_connection
+from database.database import get_engine
 from database.vector_db import get_or_create_collection
 import uuid
 class InitKnowledge:
@@ -27,19 +28,17 @@ class InitKnowledge:
     # 创建知识库的id储存表更方便找到相应资料
     def create_document(self, title, source=None):
         create_tables()
-        connection = get_connection()
-        cursor = connection.cursor()
-        cursor.execute(
-            """
-            INSERT INTO knowledge_documents (title, source)
-            VALUES (?, ?)
-            """,
-            (title, source),
-        )
-        document_id = cursor.lastrowid
-        connection.commit()
-        cursor.close()
-        connection.close()
+        with get_engine().begin() as connection:
+            result = connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_documents (title, source)
+                    VALUES (:title, :source)
+                    """
+                ),
+                {"title": title, "source": source},
+            )
+            document_id = result.lastrowid
         return document_id
 
     def embed_chunks(self, chunks):
@@ -75,24 +74,23 @@ class InitKnowledge:
             embeddings=embeddings
         )
         create_tables()
-        connection = get_connection()
-        cursor = connection.cursor()
-        for chunk in chunks:
-            cursor.execute(
-                """
-                INSERT INTO knowledge_chunks
-                    (document_id, content, source)
-                VALUES (?,?,?)
-                """,
-                (
-                    document_id,
-                    chunk,
-                    source,
+        with get_engine().begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_chunks (document_id, content, source)
+                    VALUES (:document_id, :content, :source)
+                    """
                 ),
+                [
+                    {
+                        "document_id": document_id,
+                        "content": chunk,
+                        "source": source,
+                    }
+                    for chunk in chunks
+                ],
             )
-        connection.commit()
-        cursor.close()
-        connection.close()
 
     # ! 增加知识进入（用户输入知识库）
     def ingest_text(self, text, source, title=None):
@@ -111,15 +109,13 @@ class InitKnowledge:
 
     def find_document_id(self, source):
         create_tables()
-        connection = get_connection()
-        cursor = connection.cursor()
-        cursor.execute(
-            "SELECT id FROM knowledge_documents WHERE source = ?",
-            (source,),
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        connection.close()
+        with get_engine().connect() as connection:
+            row = connection.execute(
+                text(
+                    "SELECT id FROM knowledge_documents WHERE source = :source"
+                ),
+                {"source": source},
+            ).first()
         return row[0] if row else None
 
     def ingest_file(self, file_path):
