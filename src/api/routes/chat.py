@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/chat/stream")
 # req: ChatRequest 是 FastAPI 中用来接收并校验客户端传参（请求体）的语法。
 async def chat_stream(req: ChatRequest):
-    agent = get_agent(req.session_id)
+    agent = get_agent(req.user_id, req.session_id)
 
     async def event_stream():
         try:

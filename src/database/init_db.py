@@ -9,12 +9,15 @@ def create_tables() -> None:
         """
         CREATE TABLE IF NOT EXISTS memories (
             id BIGINT NOT NULL AUTO_INCREMENT,
+            user_id VARCHAR(128) NOT NULL,
+            session_id VARCHAR(128) NOT NULL,
             content TEXT NOT NULL,
             category VARCHAR(50) NOT NULL,
             importance INT NOT NULL DEFAULT 0,
             embedding JSON NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id)
+            PRIMARY KEY (id),
+            INDEX idx_memories_user_session (user_id, session_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """,
         """

@@ -2,11 +2,21 @@ import asyncio
 
 
 class AgentExecutor:
-    def __init__(self, memory_manager, knowledge_manager, tool_manager, mcp_manager=None):
+    def __init__(
+        self,
+        memory_manager,
+        knowledge_manager,
+        tool_manager,
+        mcp_manager=None,
+        user_id="local",
+        session_id="cli",
+    ):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
         self.tool_manager = tool_manager
         self.mcp_manager = mcp_manager
+        self.user_id = user_id
+        self.session_id = session_id
 
     async def execute(self, routes):
         results = []
@@ -14,7 +24,12 @@ class AgentExecutor:
             route_type = route.get("type")
             query = route.get("query", "")
             if route_type == "MEMORY_SEARCH":
-                raw = await asyncio.to_thread(self.memory_manager.search, query)
+                raw = await asyncio.to_thread(
+                    self.memory_manager.search,
+                    query,
+                    self.user_id,
+                    self.session_id,
+                )
                 results.append(self._format_memory_search(raw))
 
             elif route_type == "KNOWLEDGE_SEARCH":
@@ -28,7 +43,13 @@ class AgentExecutor:
                     self.memory_manager.embedding_manager.embed, query
                 )
                 await asyncio.to_thread(
-                    self.memory_manager.save, query, category, importance, embedding
+                    self.memory_manager.save,
+                    query,
+                    category,
+                    importance,
+                    embedding,
+                    self.user_id,
+                    self.session_id,
                 )
                 results.append(
                     {

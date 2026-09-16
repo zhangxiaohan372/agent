@@ -14,6 +14,8 @@ TABLE_COLUMNS = {
     "knowledge_chunks": ("id", "document_id", "content", "source", "created_time"),
     "memories": (
         "id",
+        "user_id",
+        "session_id",
         "content",
         "category",
         "importance",
@@ -62,6 +64,14 @@ def migrate() -> dict[str, int]:
                         f"SELECT {', '.join(columns)} FROM {table} ORDER BY id"
                     )
                 ]
+                if table == "memories":
+                    for row in rows:
+                        row.setdefault("user_id", "legacy")
+                        row.setdefault("session_id", "legacy")
+                    if "user_id" not in columns:
+                        columns.append("user_id")
+                    if "session_id" not in columns:
+                        columns.append("session_id")
                 if not rows:
                     copied[table] = 0
                     continue

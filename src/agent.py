@@ -25,7 +25,7 @@ from memory import MemoryManager
 
 
 class Agent:
-    def __init__(self):
+    def __init__(self, user_id="local", session_id="cli"):
         self.client = AsyncOpenAI(
             base_url="https://api.deepseek.com/v1",
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -53,6 +53,8 @@ class Agent:
             knowledge_manager=self.knowledge_manager,
             tool_manager=self.tool_manager,
             mcp_manager=self.mcp_manager,
+            user_id=user_id,
+            session_id=session_id,
         )
 
     async def _call_llm(self):

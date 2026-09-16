@@ -11,14 +11,16 @@ class MemoryManager:
     def __init__(self):
         self.embedding_manager = EmbeddingManager()
 
-    def save(self, memory, category, importance, embedding=None):
+    def save(self, memory, category, importance, embedding, user_id, session_id):
         embedding_str = json.dumps(embedding) if embedding is not None else None
         with get_engine().begin() as connection:
             connection.execute(
                 text(
                     """
-                    INSERT INTO memories (content, category, importance, embedding)
-                    VALUES (:content, :category, :importance, :embedding)
+                    INSERT INTO memories
+                        (content, category, importance, embedding, user_id, session_id)
+                    VALUES
+                        (:content, :category, :importance, :embedding, :user_id, :session_id)
                     """
                 ),
                 {
@@ -26,10 +28,12 @@ class MemoryManager:
                     "category": category,
                     "importance": importance,
                     "embedding": embedding_str,
+                    "user_id": user_id,
+                    "session_id": session_id,
                 },
             )
 
-    def search(self, query, top_k=5):
+    def search(self, query, user_id, session_id, top_k=5):
         #给设置搜索词进行向量转换，获取向量值
         query_embedding = self.embedding_manager.embed(query)
         with get_engine().connect() as connection:
@@ -38,9 +42,12 @@ class MemoryManager:
                     """
                 SELECT id,content,category,importance,embedding
                 FROM memories
-                WHERE embedding IS NOT NULL
+                WHERE user_id = :user_id
+                  AND session_id = :session_id
+                  AND embedding IS NOT NULL
                 """
-                )
+                ),
+                {"user_id": user_id, "session_id": session_id},
             ).fetchall()
         # 获取所有memory的数据
         scored = []
@@ -65,9 +72,17 @@ class MemoryManager:
             for _, row in scored[:top_k]
         ]
 
-    def get_all(self):
+    def get_all(self, user_id, session_id):
         with get_engine().connect() as connection:
-            return connection.execute(text("SELECT * FROM memories")).fetchall()
+            return connection.execute(
+                text(
+                    """
+                    SELECT * FROM memories
+                    WHERE user_id = :user_id AND session_id = :session_id
+                    """
+                ),
+                {"user_id": user_id, "session_id": session_id},
+            ).fetchall()
 
     def close(self):
         """Retained for callers; database connections are scoped per operation."""
