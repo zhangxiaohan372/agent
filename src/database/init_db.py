@@ -30,17 +30,6 @@ def create_tables() -> None:
             INDEX idx_knowledge_documents_source (source(255))
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """,
-        """
-        CREATE TABLE IF NOT EXISTS knowledge_chunks (
-            id BIGINT NOT NULL AUTO_INCREMENT,
-            document_id BIGINT NOT NULL,
-            content MEDIUMTEXT NOT NULL,
-            source VARCHAR(1024) NULL,
-            created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            INDEX idx_knowledge_chunks_document_id (document_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """,
     )
     with get_engine().begin() as connection:
         for statement in statements:

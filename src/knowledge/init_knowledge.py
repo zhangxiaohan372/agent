@@ -73,24 +73,6 @@ class InitKnowledge:
             documents=documents,
             embeddings=embeddings
         )
-        create_tables()
-        with get_engine().begin() as connection:
-            connection.execute(
-                text(
-                    """
-                    INSERT INTO knowledge_chunks (document_id, content, source)
-                    VALUES (:document_id, :content, :source)
-                    """
-                ),
-                [
-                    {
-                        "document_id": document_id,
-                        "content": chunk,
-                        "source": source,
-                    }
-                    for chunk in chunks
-                ],
-            )
 
     # ! 增加知识进入（用户输入知识库）
     def ingest_text(self, text, source, title=None):

@@ -11,7 +11,6 @@ from database.init_db import create_tables
 SQLITE_PATH = Path(__file__).with_name("agent.db")
 TABLE_COLUMNS = {
     "knowledge_documents": ("id", "title", "source", "created_time"),
-    "knowledge_chunks": ("id", "document_id", "content", "source", "created_time"),
     "memories": (
         "id",
         "user_id",
