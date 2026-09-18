@@ -100,6 +100,11 @@ class InitKnowledge:
             ).first()
         return row[0] if row else None
 
+#     MySQL 找到文档记录？
+#   ├─ 否 → 新建 document_id，切片并写入 Chroma
+#   └─ 是
+#       ├─ Chroma 完全有数据 → 直接跳过
+#       └─ Chroma 完全为空 → 用原 document_id 重新切片并恢复到 Chroma
     def ingest_file(self, file_path):
         file_path = str(file_path)
         existing_id = self.find_document_id(file_path)
