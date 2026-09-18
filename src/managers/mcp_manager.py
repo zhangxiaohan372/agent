@@ -12,6 +12,7 @@
 #         ▼ 4. 执行层 (session.call_tool)
 #  接收 LLM 参数并调用子进程执行，把结果返回给大模型
 
+import asyncio
 import json
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -56,19 +57,22 @@ class MCPManager:
                 env=server_cfg.get("env"),
             )
 
+            # 为每个服务创建独立的局部 stack，避免单点失败导致 AnyIO 作用域泄露
+            server_stack = AsyncExitStack()
             try:
                 # 步骤 1: 启动子进程并接管 stdin/stdout
                 read_stream, write_stream = (
-                    await self.exit_stack.enter_async_context(
+                    await server_stack.enter_async_context(
                         stdio_client(stdio_params)
                     )
                 )
 
                 # 步骤 2: 将字节流包装为 JSON-RPC 客户端会话
-                session = await self.exit_stack.enter_async_context(
+                session = await server_stack.enter_async_context(
                     ClientSession(read_stream, write_stream)
                 )
-                await session.initialize()
+                # 设置 5 秒超时，防止外部子进程（如 uvx 下载包）卡死整个请求
+                await asyncio.wait_for(session.initialize(), timeout=5.0)
                 print(f"[MCP] 已建立连接: {server_name}")
 
                 # 步骤 3: 获取元数据并注册到大模型格式
@@ -87,8 +91,13 @@ class MCPManager:
                     )
                     print(f"  └─ 注册工具: {tool.name}")
 
+                # 连接成功，才把该服务的生命周期托管给全局 exit_stack
+                self.exit_stack.push_async_callback(server_stack.aclose)
+
             except Exception as e:
-                print(f"[MCP] 服务 {server_name} 启动失败: {e}")
+                # 💥 核心降级：连接失败时，立刻关掉刚才进入的半截子进程，释放 AnyIO 作用域
+                await server_stack.aclose()
+                print(f"[MCP警告] 服务 {server_name} 启动失败，已优雅降级并跳过该工具: {e}")
 
     async def execute_tool(
         self, tool_name: str, arguments: dict | None = None

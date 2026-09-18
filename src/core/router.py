@@ -16,6 +16,7 @@ class Router:
         self.prompt = prompt
         self.model = model
 
+    # 路由器判断要聊天、查记忆还是查知识库时，只取最近 6 条用户或助手消息，并参考当前轮刚查到的内容。
     def _build_router_messages(self, messages, history_limit=6):
         """保留近期对话语义，同时隔离业务 system prompt 和旧工具上下文。"""
         last_user_index = next(
