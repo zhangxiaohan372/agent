@@ -104,9 +104,12 @@ class Agent:
     async def close(self):
         await self.mcp_manager.close()
 
-    async def run_one_turn_stream(self, user_input, max_steps=3):
+    async def run_one_turn_stream(self, user_input, max_steps=3, auth_token=None):
         if not self._mcp_initialized:
             await self.init_mcp()
+
+        if auth_token:
+            self.executor.auth_token = auth_token
 
         state = AgentState(user_input)
         self.message_manager.add_user_message(user_input)
@@ -131,11 +134,11 @@ class Agent:
 
         yield {"type": "done"}
 
-    async def run_one_turn(self, user_input, max_steps=3):
+    async def run_one_turn(self, user_input, max_steps=3, auth_token=None):
         print(f"[日志] 用户输入: {user_input}")
         chunks = []
- 
-        async for event in self.run_one_turn_stream(user_input, max_steps):
+
+        async for event in self.run_one_turn_stream(user_input, max_steps, auth_token=auth_token):
             if event["type"] == "step":
                 print(f"[日志] Agent 第 {event['step']} 步")
                 print(f"[日志] Router 路由: {event['routes']}")

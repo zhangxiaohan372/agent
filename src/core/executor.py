@@ -10,6 +10,7 @@ class AgentExecutor:
         mcp_manager=None,
         user_id="local",
         session_id="cli",
+        auth_token=None,
     ):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
@@ -17,6 +18,7 @@ class AgentExecutor:
         self.mcp_manager = mcp_manager
         self.user_id = user_id
         self.session_id = session_id
+        self.auth_token = auth_token
 
     async def execute(self, routes):
         results = []
@@ -59,7 +61,10 @@ class AgentExecutor:
                 )
             elif route_type == "TOOL":
                 tool_name = route.get("name")
-                tool_args = route.get("args") or {}
+                tool_args = (route.get("args") or {}).copy()
+                if self.auth_token and "auth_token" not in tool_args:
+                    tool_args["auth_token"] = self.auth_token
+
                 # 优先判断是否是 MCP 注册的工具
                 if self.mcp_manager and tool_name in self.mcp_manager.tool_to_session:
                     try:
@@ -71,7 +76,14 @@ class AgentExecutor:
                     if fn is None:
                         content = f"未知工具: {tool_name}"
                     else:
-                        content = str(await asyncio.to_thread(fn, **tool_args))
+                        try:
+                            res = await asyncio.to_thread(fn, **tool_args)
+                            if isinstance(res, dict) and "message" in res:
+                                content = res["message"]
+                            else:
+                                content = str(res)
+                        except Exception as e:
+                            content = f"工具执行异常: {e}"
                 results.append({"type": "TOOL", "content": f"{tool_name}: {content}"})
             elif route_type == "CHAT":
                 results.append({"type": "CHAT", "content": ""})

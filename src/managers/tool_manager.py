@@ -1,25 +1,95 @@
 from datetime import datetime
 import json
+from tools.pet_tool import register_pet, query_pets
+
+
 class ToolManager:
     def __init__(self):
         # 当前可用工具字典
         self.available_functions = {}
         # 工具列表
-        self.tools=[]
+        self.tools = []
+
+        self.register(
+            name="register_pet",
+            description="向管理系统登记新增流浪动物（猫咪/狗狗）档案。注意：写入前必须已获得用户的明确确认。",
+            function=register_pet,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pet_type": {
+                        "type": "string",
+                        "enum": ["cat", "dog"],
+                        "description": "动物类型：cat（猫咪）或 dog（狗狗）",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "动物名字/昵称，如'小橘'、'大黄'",
+                    },
+                    "area": {
+                        "type": "string",
+                        "description": "发现或常出没区域，如'图书馆草坪'、'二教'、'一食堂附近'",
+                    },
+                    "breed": {
+                        "type": "string",
+                        "description": "品种，如'中华田园橘猫'、'三花猫'、'田园犬'（可选）",
+                    },
+                    "age": {
+                        "type": "string",
+                        "description": "估算年龄，如'约1岁'或'幼年'（可选）",
+                    },
+                    "health_status": {
+                        "type": "string",
+                        "description": "健康状况，如'健康'、'生病'、'受伤'（可选）",
+                    },
+                    "health": {
+                        "type": "string",
+                        "description": "详细健康描述或外貌特征，如'精神良好，毛发顺滑'（可选）",
+                    },
+                },
+                "required": ["pet_type", "name", "area"],
+            },
+        )
+
+        self.register(
+            name="query_pets",
+            description="查询系统中已登记的流浪猫咪或狗狗列表与档案信息",
+            function=query_pets,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pet_type": {
+                        "type": "string",
+                        "enum": ["cat", "dog"],
+                        "description": "动物类型：cat（猫咪）或 dog（狗狗）",
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "关键词搜索，如名字或品种（可选）",
+                    },
+                    "area": {
+                        "type": "string",
+                        "description": "出没区域筛选（可选）",
+                    },
+                },
+                "required": [],
+            },
+        )
+
         self.register(
             name="get_current_weather",
             description="获取天气",
             function=self.get_current_weather,
             parameters={
-                "type":"object",
-                "properties":{
-                    "location":{
-                        "type":"string",
-                        "description":"城市名称"
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "城市名称",
                     }
                 },
-                "required":["location"]
-            }
+                "required": ["location"],
+            },
         )
 
         self.register(
@@ -27,10 +97,10 @@ class ToolManager:
             description="获取时间",
             function=self.get_current_time,
             parameters={
-                "type":"object",
-                "properties":{},
-                "required":[]
-            }
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
         )
     def get_current_weather(self, location):
 

@@ -76,7 +76,8 @@ async def authenticate_user(authorization: str | None = Header(default=None)) ->
 @router.post("/chat/stream")
 async def chat_stream(
     req: ChatRequest,
-    current_user: dict = Depends(authenticate_user)
+    authorization: str | None = Header(default=None),
+    current_user: dict = Depends(authenticate_user),
 ):
     # 严格使用由业务端 Token 解密出的真实用户 ID，杜绝客户端伪造
     real_user_id = str(current_user["user_id"])
@@ -84,7 +85,7 @@ async def chat_stream(
 
     async def event_stream():
         try:
-            async for event in agent.run_one_turn_stream(req.message):
+            async for event in agent.run_one_turn_stream(req.message, auth_token=authorization):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             payload = {"type": "error", "message": str(e)}
