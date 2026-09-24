@@ -12,7 +12,7 @@ class ToolManager:
 
         self.register(
             name="register_pet",
-            description="向管理系统登记新增流浪动物（猫咪/狗狗）档案。注意：写入前必须已获得用户的明确确认。",
+            description="向管理系统登记新增流浪动物（猫咪/狗狗）档案。名称、区域、品种、年龄、健康状态和健康描述必须由用户提供并逐项确认；缺失时先询问，不要猜测。",
             function=register_pet,
             parameters={
                 "type": "object",
@@ -32,22 +32,22 @@ class ToolManager:
                     },
                     "breed": {
                         "type": "string",
-                        "description": "品种，如'中华田园橘猫'、'三花猫'、'田园犬'（可选）",
+                        "description": "用户提供的品种，如'橘猫'、'三花猫'、'田园犬'",
                     },
                     "age": {
                         "type": "string",
-                        "description": "估算年龄，如'约1岁'或'幼年'（可选）",
+                        "description": "用户提供的估算年龄，如'约1岁'或'幼年'",
                     },
                     "health_status": {
                         "type": "string",
-                        "description": "健康状况，如'健康'、'生病'、'受伤'（可选）",
+                        "description": "用户提供的健康状态，如'健康'、'需要关注'、'紧急'",
                     },
                     "health": {
                         "type": "string",
-                        "description": "详细健康描述或外貌特征，如'精神良好，毛发顺滑'（可选）",
+                        "description": "用户提供的健康描述，如'精神良好，毛发顺滑'",
                     },
                 },
-                "required": ["pet_type", "name", "area"],
+                "required": ["pet_type", "name", "area", "breed", "age", "health_status", "health"],
             },
         )
 

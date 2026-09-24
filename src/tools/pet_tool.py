@@ -26,8 +26,15 @@ def register_pet(
     向管理系统登记流浪动物（猫咪/狗狗）。
     安全规范：必须携带有效的认证令牌（Token），通过业务端权限校验（pet:write）完成写入。
     """
-    # 规整化宠物类型与对应表和中文标签
-    is_cat = any(cat_kw in pet_type.lower() for cat_kw in ["cat", "猫"])
+    pet_type_value = pet_type.strip().lower() if isinstance(pet_type, str) else ""
+    if pet_type_value not in {"cat", "dog", "猫", "猫咪", "狗", "狗狗"}:
+        return {
+            "success": False,
+            "channel": "invalid_fields",
+            "message": "动物类型只能是猫或狗，数据未提交。",
+        }
+
+    is_cat = pet_type_value in {"cat", "猫", "猫咪"}
     table = "cats" if is_cat else "dogs"
     pet_label = "猫咪" if is_cat else "狗狗"
 
@@ -39,13 +46,35 @@ def register_pet(
             "message": f"【权限校验失败】未检测到登录令牌（Token），无权限向管理系统登记{pet_label}。请登录具有管理权限的账号后再试。",
         }
 
-    # 设置字段默认值，确保业务必填字段完整
-    default_breed = "中华田园猫" if is_cat else "中华田园犬"
-    final_breed = (breed or "").strip() or default_breed
-    final_age = (age or "").strip() or "约1岁"
-    final_health_status = (health_status or "").strip() or "健康"
-    final_health = (health or "").strip() or "健康状况良好，无明显外伤"
-    final_area = (area or "").strip() or "校内未标明区域"
+    required_fields = {
+        "名称": name,
+        "所在区域": area,
+        "品种": breed,
+        "年龄": age,
+        "健康状态": health_status,
+        "健康描述": health,
+    }
+    validated_fields: dict[str, str] = {}
+    missing_fields = []
+    for label, value in required_fields.items():
+        cleaned = value.strip() if isinstance(value, str) else ""
+        if cleaned:
+            validated_fields[label] = cleaned
+        else:
+            missing_fields.append(label)
+    if missing_fields:
+        return {
+            "success": False,
+            "channel": "missing_fields",
+            "message": f"缺少必填信息：{'、'.join(missing_fields)}。请向用户核实后再提交，数据未写入。",
+        }
+
+    final_name = validated_fields["名称"]
+    final_area = validated_fields["所在区域"]
+    final_breed = validated_fields["品种"]
+    final_age = validated_fields["年龄"]
+    final_health_status = validated_fields["健康状态"]
+    final_health = validated_fields["健康描述"]
     found_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     api_endpoint = f"{BUSINESS_API_BASE_URL}/api/admin/{table}"
@@ -56,7 +85,7 @@ def register_pet(
     }
 
     payload = {
-        "name": name,
+        "name": final_name,
         "age": final_age,
         "breed": final_breed,
         "healthStatus": final_health_status,
@@ -77,7 +106,7 @@ def register_pet(
                     return {
                         "success": True,
                         "channel": "api",
-                        "message": f"【系统提示】已成功通过业务系统登记{pet_label}【{name}】（档案编号 #{insert_id}）！所在区域：{final_area}，品种：{final_breed}，健康状况：{final_health_status}。",
+                        "message": f"【系统提示】已成功通过业务系统登记{pet_label}【{final_name}】（档案编号 #{insert_id}）！所在区域：{final_area}，品种：{final_breed}，健康状况：{final_health_status}。",
                         "id": insert_id,
                     }
                 else:
