@@ -12,7 +12,7 @@ class ToolManager:
 
         self.register(
             name="register_pet",
-            description="向管理系统登记新增流浪动物（猫咪/狗狗）档案。名称、区域、品种、年龄、健康状态和健康描述必须由用户提供并逐项确认；缺失时先询问，不要猜测。",
+            description="向管理系统登记新增流浪动物（猫咪/狗狗）档案。所有 required 字段（种类、名称、区域、品种、年龄、健康状态、健康描述）都必须由用户提供并逐项确认；缺失时先询问，不要猜测。",
             function=register_pet,
             parameters={
                 "type": "object",
