@@ -7,6 +7,7 @@ class Router:
         "MEMORY_SEARCH",
         "KNOWLEDGE_SEARCH",
         "KNOWLEDGE_INGEST",
+        "PET_REGISTRATION",
         "TOOL",
         "CHAT",
     }
@@ -95,13 +96,16 @@ class Router:
             route_type = route.get("type")
             if route_type not in self.VALID_ROUTES:
                 continue
+            arguments = route.get("args") or route.get("tool_args") or {}
+            if not isinstance(arguments, dict):
+                arguments = {}
             valid_routes.append(
                 {
                     "type": route_type,
                     "query": route.get("query", user_input),
                     "priority": route.get("priority", 1),
                     "name": route.get("name") or route.get("tool_name"),
-                    "args": route.get("args") or route.get("tool_args") or {},
+                    "args": {key: value for key, value in arguments.items() if key != "auth_token"},
                 }
             )
 

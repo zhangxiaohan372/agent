@@ -14,6 +14,7 @@ from openai import AsyncOpenAI
 import os
 
 from core.executor import AgentExecutor
+from core.pet_registration import PetRegistration
 from core.router import Router
 from core.state import AgentState
 from knowledge import KnowledgeManager
@@ -26,6 +27,8 @@ from memory import MemoryManager
 
 class Agent:
     def __init__(self, user_id="local", session_id="cli"):
+        self._turn_lock = asyncio.Lock()
+        self.pet_registration = PetRegistration()
         self.client = AsyncOpenAI(
             base_url="https://api.deepseek.com/v1",
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -105,34 +108,80 @@ class Agent:
         await self.mcp_manager.close()
 
     async def run_one_turn_stream(self, user_input, max_steps=3, auth_token=None):
-        if not self._mcp_initialized:
-            await self.init_mcp()
+        async with self._turn_lock:
+            if not self._mcp_initialized:
+                await self.init_mcp()
 
-        if auth_token:
-            self.executor.auth_token = auth_token
+            state = AgentState(user_input)
+            self.message_manager.add_user_message(user_input)
+            reply_kind = self.pet_registration.reply_kind(user_input)
 
-        state = AgentState(user_input)
-        self.message_manager.add_user_message(user_input)
+            if reply_kind == "cancel":
+                self.pet_registration.cancel()
+                message = "已取消登记，数据未写入。"
+                self.message_manager.messages.append({"role": "assistant", "content": message})
+                yield {"type": "token", "content": message}
+                yield {"type": "done"}
+                return
 
-        for _ in range(max_steps):
-            state.step += 1
-            state.routes = await self.router.route(self.message_manager.get_messages())
+            if reply_kind == "confirm":
+                confirmed_fields = self.pet_registration.confirm()
+                if confirmed_fields is None:
+                    message = "当前没有完整且待确认的登记信息，请先提供资料并核对草稿。"
+                else:
+                    try:
+                        result = await self.executor.execute_confirmed_pet(
+                            confirmed_fields, auth_token
+                        )
+                    except asyncio.CancelledError:
+                        self.pet_registration.finish(False, uncertain=True)
+                        raise
+                    self.pet_registration.finish(result["success"], result["uncertain"])
+                    message = result["content"]
+                    yield {"type": "context", "content": [result]}
+                self.message_manager.messages.append({"role": "assistant", "content": message})
+                yield {"type": "token", "content": message}
+                yield {"type": "done"}
+                return
 
-            yield {"type": "step", "step": state.step, "routes": state.routes}
+            self.pet_registration.begin_revision()
 
-            if self._is_ready_to_chat(state.routes):
-                break
+            for _ in range(max_steps):
+                state.step += 1
+                state.routes = await self.router.route(self.message_manager.get_messages())
+                yield {"type": "step", "step": state.step, "routes": state.routes}
 
-            context = await self.executor.execute(state.routes)
-            state.tool_results.extend(context)
-            self.build_context(context)
+                proposals = [
+                    route for route in state.routes
+                    if route.get("type") == "PET_REGISTRATION"
+                    or (route.get("type") == "TOOL" and route.get("name") == "register_pet")
+                ]
+                if proposals:
+                    message = (
+                        self.pet_registration.propose(proposals[0].get("args"))
+                        if len(proposals) == 1
+                        else "一次只能核对一份登记，请重新提供登记信息。"
+                    )
+                    if len(proposals) != 1:
+                        self.pet_registration.cancel()
+                    self.message_manager.messages.append({"role": "assistant", "content": message})
+                    yield {"type": "token", "content": message}
+                    yield {"type": "done"}
+                    return
 
-            yield {"type": "context", "content": context}
+                if self.pet_registration.fields:
+                    self.pet_registration.cancel()
+                if self._is_ready_to_chat(state.routes):
+                    break
 
-        async for text in self.generate():
-            yield {"type": "token", "content": text}
+                context = await self.executor.execute(state.routes)
+                state.tool_results.extend(context)
+                self.build_context(context)
+                yield {"type": "context", "content": context}
 
-        yield {"type": "done"}
+            async for text in self.generate():
+                yield {"type": "token", "content": text}
+            yield {"type": "done"}
 
     async def run_one_turn(self, user_input, max_steps=3, auth_token=None):
         print(f"[日志] 用户输入: {user_input}")

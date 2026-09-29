@@ -10,7 +10,6 @@ class AgentExecutor:
         mcp_manager=None,
         user_id="local",
         session_id="cli",
-        auth_token=None,
     ):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
@@ -18,7 +17,6 @@ class AgentExecutor:
         self.mcp_manager = mcp_manager
         self.user_id = user_id
         self.session_id = session_id
-        self.auth_token = auth_token
 
     async def execute(self, routes):
         results = []
@@ -61,9 +59,16 @@ class AgentExecutor:
                 )
             elif route_type == "TOOL":
                 tool_name = route.get("name")
-                tool_args = (route.get("args") or {}).copy()
-                if self.auth_token and "auth_token" not in tool_args:
-                    tool_args["auth_token"] = self.auth_token
+                tool_args = route.get("args") or {}
+                tool_args = tool_args.copy() if isinstance(tool_args, dict) else {}
+                tool_args.pop("auth_token", None)
+
+                if tool_name == "register_pet":
+                    results.append({
+                        "type": "TOOL",
+                        "content": "register_pet: 尚未通过代码层确认，拒绝写入。",
+                    })
+                    continue
 
                 # 优先判断是否是 MCP 注册的工具
                 if self.mcp_manager and tool_name in self.mcp_manager.tool_to_session:
@@ -89,6 +94,42 @@ class AgentExecutor:
                 results.append({"type": "CHAT", "content": ""})
 
         return results
+
+    async def execute_confirmed_pet(self, fields, auth_token):
+        if not auth_token:
+            return {
+                "type": "TOOL",
+                "content": "register_pet: 缺少当前请求的认证令牌，数据未写入。",
+                "success": False,
+                "uncertain": False,
+            }
+        register_pet = self.tool_manager.available_functions["register_pet"]
+        try:
+            result = await asyncio.to_thread(
+                register_pet, **fields, auth_token=auth_token
+            )
+        except Exception:
+            result = {
+                "success": False,
+                "channel": "unexpected_error",
+                "message": "登记结果未知，请检查业务服务状态。",
+            }
+        success = isinstance(result, dict) and result.get("success") is True
+        uncertain = not isinstance(result, dict) or result.get("channel") in {
+            "connection_error", "api_error", "unexpected_error",
+        }
+        message = (
+            result.get("message", "登记失败。")
+            if isinstance(result, dict) else "登记结果未知。"
+        )
+        if uncertain:
+            message += "提交结果可能未知，请先到业务系统核实，勿重复提交。"
+        return {
+            "type": "TOOL",
+            "content": f"register_pet: {message}",
+            "success": success,
+            "uncertain": uncertain,
+        }
 
     def _format_memory_search(self, rows):
         if not rows:

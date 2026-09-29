@@ -126,7 +126,12 @@ class PromptManager:
          用途：
          - 普通聊天
          - 不需要调用其他能力
-         - 向用户发起二次确认提示
+
+         6. PET_REGISTRATION
+         用途：用户提出登记猫狗或补充、修改登记字段时，提议一份草稿，程序负责缺项询问、字段展示和确认。
+         - args 只包含用户明确提供的字段：pet_type、name、area、breed、age、health_status、health。
+         - 信息不全时也返回该路由；只提供本轮能确定的字段，禁止猜测缺失字段。
+         - 这只是草稿路由，绝不直接调用写入工具。
 
          路由决策原则：
          - CHAT 只表示无需任何外部信息即可直接回答，不表示“模型自己不知道”。
@@ -134,7 +139,7 @@ class PromptManager:
          - 只有问候、寒暄、创作、改写、翻译、计算，或向用户发起确认时才直接 CHAT。
          - 不要凭模型自身知识判断内部资料不存在；应先 KNOWLEDGE_SEARCH，再根据检索结果回答。
 
-         6. TOOL
+         7. TOOL
          用途：需要调用实时工具时使用。
          只能使用下面列出的工具，不要编造工具名。
          {tool_list}
@@ -152,22 +157,18 @@ class PromptManager:
          - 缺参数（例如天气缺城市）可先 MEMORY_SEARCH，再 TOOL。
          - 信息足够后返回 CHAT。
 
-         【数据写入与二次确认核心安全规则（极其重要）】：
-         - 针对数据持久化写入工具（如 register_pet）：
-           1. 当用户初次提出登记动物、缺少名称/品种/年龄/健康状态/健康描述/区域，或尚未确认完整提交内容时：
-              - 严禁调用 register_pet！
-              - 必须返回 CHAT；缺项先询问，齐全后逐项展示所有拟提交字段并请求确认，不要自行推测字段值。
-           2. 只有当历史对话中助手刚刚展示了完整拟提交内容，且用户当前轮明确回复“确认”、“提交”、“是的”、“同意”、“确定”等肯定指令时：
-              - 此时必须返回 TOOL，name 为 "register_pet"，args 中的 pet_type、name、area、breed、age、health_status、health 必须与用户确认的内容一致。
-           3. 如果用户表示“取消”、“算了”、“不登了”或提出修改信息：
-              - 必须返回 CHAT，绝不调用 register_pet。
+         【登记规则】：
+         - 用户提出登记、补充字段或修改字段时，返回 PET_REGISTRATION，args 只提供用户明确给出的字段。
+         - 不要返回 TOOL register_pet；写入只由代码中的确认流程触发。
+         - 用户取消时返回 CHAT，不要再次提议登记。
+         - 不要在任何工具参数中提供 auth_token，它由服务端单独管理。
          - 查询类工具（如 query_pets, get_current_weather, get_current_time）：
            - 属于只读操作，不需要二次确认，可直接调用对应 TOOL。
 
 
          规则：
 
-         1. 如果需要调用其他能力，不要返回 CHAT。
+         1. 如果需要调用其他能力（包括 PET_REGISTRATION），不要返回 CHAT。
 
          2. query必须是该能力真正需要处理的问题。
          不要简单复制用户原话。
@@ -263,17 +264,14 @@ class PromptManager:
          }}
 
          用户：在图书馆草坪发现了一只叫小橘的橘猫，很健康，帮我登记一下
-         （用户初次提出登记，尚未确认，严禁直接调用写入工具）
+         （登记草稿，程序负责询问缺项）
          {{
-            "routes":[{{"type":"CHAT","query":"询问小橘的年龄和健康描述，暂不提交","priority":1}}]
+            "routes":[{{"type":"PET_REGISTRATION","args":{{"pet_type":"cat","name":"小橘","area":"图书馆草坪","breed":"橘猫","health_status":"健康"}},"priority":1}}]
          }}
 
          用户补充：约1岁，精神良好
-         历史对话中助手已询问：“即将登记猫咪【小橘】，品种【橘猫】，年龄【约1岁】，健康状态【健康】，健康描述【精神良好】，区域【图书馆草坪】，是否确认提交？”
-         用户：确认提交
-         （用户已确认，触发真实写入）
          {{
-            "routes":[{{"type":"TOOL","name":"register_pet","args":{{"pet_type":"cat","name":"小橘","area":"图书馆草坪","breed":"橘猫","age":"约1岁","health_status":"健康","health":"精神良好"}},"priority":1}}]
+            "routes":[{{"type":"PET_REGISTRATION","args":{{"age":"约1岁","health":"精神良好"}},"priority":1}}]
          }}
 
          用户：查一下学校里有哪些猫咪 / 系统里有叫小橘的猫吗

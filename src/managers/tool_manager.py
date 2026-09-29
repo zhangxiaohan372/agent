@@ -119,8 +119,11 @@ class ToolManager:
     def execute_tool_call(self,tool_call):
         # 工具名称
         tool_name = tool_call.function.name
+        if tool_name == "register_pet":
+            raise PermissionError("登记只能通过已确认的会话流程执行")
         # 工具参数
         args = json.loads(tool_call.function.arguments)
+        args.pop("auth_token", None)
         # 调用工具的结果
         result = self.available_functions[tool_name](**args)
         tool_message = {
@@ -153,6 +156,8 @@ class ToolManager:
         for tool in self.tools:
             fn = tool["function"]
             name = fn["name"]
+            if name == "register_pet":
+                continue
             desc = fn["description"]
             params = fn.get("parameters", {})
             lines.append(f"- {name}: {desc}")
