@@ -14,7 +14,7 @@ from openai import AsyncOpenAI
 import os
 
 from core.executor import AgentExecutor
-from core.pet_registration import PetRegistration
+from core.pet_registration import PetRegistration, RegistrationStatus
 from core.router import Router
 from core.state import AgentState
 from knowledge import KnowledgeManager
@@ -114,7 +114,21 @@ class Agent:
 
             state = AgentState(user_input)
             self.message_manager.add_user_message(user_input)
-            reply_kind = self.pet_registration.reply_kind(user_input)
+            reply_kind = None
+            if self.pet_registration.status in {
+                RegistrationStatus.COLLECTING,
+                RegistrationStatus.AWAITING_CONFIRMATION,
+            }:
+                try:
+                    reply_kind = await self.router.classify_registration_reply(
+                        user_input, self.pet_registration.status.value
+                    )
+                except Exception:
+                    reply_kind = None
+                if reply_kind == "none":
+                    reply_kind = None
+                if reply_kind is None:
+                    reply_kind = self.pet_registration.reply_kind(user_input)
 
             if reply_kind == "cancel":
                 self.pet_registration.cancel()

@@ -17,6 +17,36 @@ class Router:
         self.prompt = prompt
         self.model = model
 
+    async def classify_registration_reply(self, text, status):
+        """Classify a registration reply without allowing the model to write data."""
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "你是登记确认意图分类器。只返回 JSON，格式为 "
+                        '{"intent":"confirm|cancel|none"}。'
+                        "confirm 仅表示用户明确同意提交当前已经展示的完整登记信息；"
+                        "cancel 表示用户明确放弃、取消或暂不提交；"
+                        "none 表示补充/修改字段、提问、犹豫、语义不明确或与登记无关。"
+                        "不要把‘我不确定’、‘先看看’识别为 confirm。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"当前登记状态：{status}\n用户回复：{text}",
+                },
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+        )
+        try:
+            intent = json.loads(response.choices[0].message.content).get("intent")
+        except (AttributeError, TypeError, json.JSONDecodeError):
+            return None
+        return intent if intent in {"confirm", "cancel", "none"} else None
+
     # 路由器判断要聊天、查记忆还是查知识库时，只取最近 6 条用户或助手消息，并参考当前轮刚查到的内容。
     def _build_router_messages(self, messages, history_limit=6):
         """保留近期对话语义，同时隔离业务 system prompt 和旧工具上下文。"""
