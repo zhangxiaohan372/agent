@@ -1,3 +1,4 @@
+import re
 from enum import Enum
 
 
@@ -53,9 +54,29 @@ class PetRegistration:
 
     def reply_kind(self, text):
         reply = self._normalize_reply(text)
-        if reply in self.CANCELLATIONS:
+        if not reply:
+            return None
+
+        # Check negative intent first because phrases such as "不要提交" also
+        # contain the confirmation keyword "提交".
+        if reply in self.CANCELLATIONS or re.search(
+            r"(?:取消(?:登记|提交)?|算了|(?:不|别|不要|先不|不用)(?:确认|提交|登记)|不登了)",
+            reply,
+        ):
             return "cancel"
-        if reply in self.CONFIRMATIONS:
+
+        if re.search(r"(?:不确定|不太确定|还没决定|拿不准)", reply):
+            return None
+
+        # Confirmation is only meaningful after a complete proposal has been
+        # shown. Allow normal polite wording around the intent, while requiring
+        # a confirmation phrase instead of matching arbitrary text.
+        if self.status != RegistrationStatus.AWAITING_CONFIRMATION:
+            return None
+        if reply in self.CONFIRMATIONS or re.search(
+            r"(?:确认|确定|同意)(?:提交|登记)?|(?:提交|登记)(?:吧|一下|了)?$|^(?:好|好的|没问题|可以)(?:吧|，|,)?(?:确认|确定|同意)?(?:提交|登记)?$",
+            reply,
+        ):
             return "confirm"
         return None
 
