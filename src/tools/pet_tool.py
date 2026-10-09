@@ -10,6 +10,10 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 BUSINESS_API_BASE_URL = os.getenv("BUSINESS_API_BASE_URL", "http://127.0.0.1:3001").rstrip("/")
 
+import time
+# 记录近期登记防重缓存：(table, name, area) -> (timestamp, insert_id)
+_RECENT_REGISTRATIONS: Dict[tuple, tuple] = {}
+
 
 def register_pet(
     pet_type: str,
@@ -75,6 +79,24 @@ def register_pet(
     final_age = validated_fields["年龄"]
     final_health_status = validated_fields["健康状态"]
     final_health = validated_fields["健康描述"]
+
+    # 幂等性防重保护：15 秒内相同动物和区域的重复请求直接返回成功，防止网络抖动或双重触发导致重复写库
+    dedup_key = (table, final_name, final_area)
+    now_ts = time.time()
+    # 清理过期缓存（超过 60 秒）
+    expired = [k for k, v in _RECENT_REGISTRATIONS.items() if now_ts - v[0] > 60]
+    for k in expired:
+        _RECENT_REGISTRATIONS.pop(k, None)
+
+    if dedup_key in _RECENT_REGISTRATIONS:
+        prev_time, prev_id = _RECENT_REGISTRATIONS[dedup_key]
+        if now_ts - prev_time < 15:
+            return {
+                "success": True,
+                "channel": "idempotent_duplicate",
+                "message": f"【系统提示】已成功通过业务系统登记{pet_label}【{final_name}】（档案编号 #{prev_id}，无需重复提交）！所在区域：{final_area}。",
+                "id": prev_id,
+            }
     found_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     api_endpoint = f"{BUSINESS_API_BASE_URL}/api/admin/{table}"
@@ -103,6 +125,7 @@ def register_pet(
                 data = resp.json()
                 if data.get("success"):
                     insert_id = data.get("data", {}).get("id")
+                    _RECENT_REGISTRATIONS[dedup_key] = (now_ts, insert_id)
                     return {
                         "success": True,
                         "channel": "api",

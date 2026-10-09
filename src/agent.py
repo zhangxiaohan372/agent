@@ -160,6 +160,7 @@ class Agent:
 
             self.pet_registration.begin_revision()
 
+            executed_routes = set()
             for _ in range(max_steps):
                 state.step += 1
                 state.routes = await self.router.route(self.message_manager.get_messages())
@@ -204,7 +205,24 @@ class Agent:
                 if self._is_ready_to_chat(state.routes):
                     break
 
-                context = await self.executor.execute(state.routes)
+                # 过滤当前单轮循环中已经执行过的相同路由，防止 Step 1 失败/完成后在 Step 2 盲目重复执行
+                unexecuted_routes = []
+                for r in state.routes:
+                    import json
+                    r_fp = (
+                        str(r.get("type")),
+                        str(r.get("name")),
+                        json.dumps(r.get("args") or {}, sort_keys=True, ensure_ascii=False)
+                    )
+                    if r_fp not in executed_routes:
+                        executed_routes.add(r_fp)
+                        unexecuted_routes.append(r)
+
+                if not unexecuted_routes:
+                    # 本轮计划调用的能力已经全部执行过，无需重复执行，直接进入生成最终回复
+                    break
+
+                context = await self.executor.execute(unexecuted_routes)
                 state.tool_results.extend(context)
                 self.build_context(context)
                 yield {"type": "context", "content": context}

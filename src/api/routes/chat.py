@@ -117,34 +117,35 @@ async def chat_confirm(
     agent = get_agent(real_user_id, req.session_id)
 
     async def event_stream():
-        try:
-            if req.action == "cancel":
-                agent.pet_registration.cancel()
-                message = "已取消登记，数据未写入。"
+        async with agent._turn_lock:
+            try:
+                if req.action == "cancel":
+                    agent.pet_registration.cancel()
+                    message = "已取消登记，数据未写入。"
+                    agent.message_manager.messages.append({"role": "assistant", "content": message})
+                    yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                    return
+
+                # action == "confirm"
+                confirmed_fields = agent.pet_registration.confirm()
+                if confirmed_fields is None:
+                    message = "当前没有待确认的登记信息或已成功提交，请勿重复操作。"
+                    agent.message_manager.messages.append({"role": "assistant", "content": message})
+                    yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                    return
+
+                result = await agent.executor.execute_confirmed_pet(confirmed_fields, authorization)
+                agent.pet_registration.finish(result["success"], result["uncertain"])
+                message = result["content"]
                 agent.message_manager.messages.append({"role": "assistant", "content": message})
+                yield f"data: {json.dumps({'type': 'context', 'content': [result]}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
-                return
-
-            # action == "confirm"
-            confirmed_fields = agent.pet_registration.confirm()
-            if confirmed_fields is None:
-                message = "当前没有待确认的登记信息，请重新提供资料。"
-                agent.message_manager.messages.append({"role": "assistant", "content": message})
-                yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
-                yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
-                return
-
-            result = await agent.executor.execute_confirmed_pet(confirmed_fields, authorization)
-            agent.pet_registration.finish(result["success"], result["uncertain"])
-            message = result["content"]
-            agent.message_manager.messages.append({"role": "assistant", "content": message})
-            yield f"data: {json.dumps({'type': 'context', 'content': [result]}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            payload = {"type": "error", "message": str(e)}
-            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                payload = {"type": "error", "message": str(e)}
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_stream(),
