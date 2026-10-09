@@ -171,15 +171,31 @@ class Agent:
                     or (route.get("type") == "TOOL" and route.get("name") == "register_pet")
                 ]
                 if proposals:
-                    message = (
-                        self.pet_registration.propose(proposals[0].get("args"))
-                        if len(proposals) == 1
-                        else "一次只能核对一份登记，请重新提供登记信息。"
-                    )
                     if len(proposals) != 1:
                         self.pet_registration.cancel()
-                    self.message_manager.messages.append({"role": "assistant", "content": message})
-                    yield {"type": "token", "content": message}
+                        message = "一次只能核对一份登记，请重新提供登记信息。"
+                        self.message_manager.messages.append({"role": "assistant", "content": message})
+                        yield {"type": "token", "content": message}
+                        yield {"type": "done"}
+                        return
+
+                    propose_result = self.pet_registration.propose(proposals[0].get("args"))
+
+                    # 字段不完整：继续文字对话收集缺失信息
+                    if self.pet_registration.status != RegistrationStatus.AWAITING_CONFIRMATION:
+                        self.message_manager.messages.append({"role": "assistant", "content": propose_result})
+                        yield {"type": "token", "content": propose_result}
+                        yield {"type": "done"}
+                        return
+
+                    # 字段完整、进入待确认：发弹窗事件，不发文字消息
+                    # 前端收到 confirm_dialog 后展示弹窗，用户点击后调 POST /api/chat/confirm
+                    self.message_manager.messages.append({"role": "assistant", "content": propose_result})
+                    yield {
+                        "type": "confirm_dialog",
+                        "fields": self.pet_registration.fields.copy(),
+                        "prompt": propose_result,   # 也附带原始文字，前端可选用
+                    }
                     yield {"type": "done"}
                     return
 

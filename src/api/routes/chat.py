@@ -4,7 +4,7 @@ import httpx
 from fastapi import APIRouter, Header, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 
-from api.schemas import ChatRequest
+from api.schemas import ChatRequest, ConfirmRequest
 from api.session import get_agent
 
 from pathlib import Path
@@ -87,6 +87,61 @@ async def chat_stream(
         try:
             async for event in agent.run_one_turn_stream(req.message, auth_token=authorization):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            payload = {"type": "error", "message": str(e)}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/chat/confirm")
+async def chat_confirm(
+    req: ConfirmRequest,
+    authorization: str | None = Header(default=None),
+    current_user: dict = Depends(authenticate_user),
+):
+    """
+    接收前端弹窗的确认/取消操作。
+    - action=confirm：执行写入，通过 SSE 流返回结果
+    - action=cancel ：取消登记，通过 SSE 流返回结果
+    """
+    real_user_id = str(current_user["user_id"])
+    agent = get_agent(real_user_id, req.session_id)
+
+    async def event_stream():
+        try:
+            if req.action == "cancel":
+                agent.pet_registration.cancel()
+                message = "已取消登记，数据未写入。"
+                agent.message_manager.messages.append({"role": "assistant", "content": message})
+                yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                return
+
+            # action == "confirm"
+            confirmed_fields = agent.pet_registration.confirm()
+            if confirmed_fields is None:
+                message = "当前没有待确认的登记信息，请重新提供资料。"
+                agent.message_manager.messages.append({"role": "assistant", "content": message})
+                yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                return
+
+            result = await agent.executor.execute_confirmed_pet(confirmed_fields, authorization)
+            agent.pet_registration.finish(result["success"], result["uncertain"])
+            message = result["content"]
+            agent.message_manager.messages.append({"role": "assistant", "content": message})
+            yield f"data: {json.dumps({'type': 'context', 'content': [result]}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'token', 'content': message}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
         except Exception as e:
             payload = {"type": "error", "message": str(e)}
             yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
