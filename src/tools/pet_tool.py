@@ -152,6 +152,7 @@ def query_pets(
     keyword: Optional[str] = None,
     area: Optional[str] = None,
     limit: int = 5,
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """
     查询流浪动物图鉴（只读公开信息，优先调用业务端 /api/app 接口）
