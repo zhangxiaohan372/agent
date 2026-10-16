@@ -198,12 +198,32 @@ def query_pets(
                 data = resp.json()
                 if data.get("success"):
                     pet_list = data.get("data", {}).get("list", [])
-                    return {
+                    basic_fields = (
+                        "id",
+                        "name",
+                        "breed",
+                        "age",
+                        "healthStatus",
+                        "health",
+                        "area",
+                        "imageUrl",
+                        "foundTime",
+                    )
+                    pets = [
+                        {key: pet[key] for key in basic_fields if key in pet}
+                        for pet in pet_list
+                        if isinstance(pet, dict)
+                    ]
+                    result = {
                         "success": True,
-                        "count": len(pet_list),
-                        "list": pet_list,
-                        "message": f"共查询到 {len(pet_list)} 只相关的{pet_label}。" if pet_list else f"暂未找到符合条件的{pet_label}。",
+                        "count": len(pets),
+                        "message": f"共查询到 {len(pets)} 只相关的{pet_label}。" if pets else f"暂未找到符合条件的{pet_label}。",
                     }
+                    if len(pets) == 1:
+                        result["pet"] = pets[0]
+                    elif pets:
+                        result["pets"] = pets
+                    return result
     except Exception:
         pass
 

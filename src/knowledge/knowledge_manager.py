@@ -33,7 +33,7 @@ class KnowledgeManager:
         results = self.collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            where=where_clause,
+            where=where_clause, 
             include=["documents", "metadatas", "distances"]
         )
         

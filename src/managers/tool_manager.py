@@ -53,7 +53,7 @@ class ToolManager:
 
         self.register(
             name="query_pets",
-            description="查询系统中已登记的流浪猫咪或狗狗列表与档案信息",
+            description="查询系统中已登记的流浪猫咪或狗狗基础信息；单条结果返回 pet，多条结果返回 pets",
             function=query_pets,
             parameters={
                 "type": "object",
