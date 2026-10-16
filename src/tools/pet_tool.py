@@ -214,10 +214,32 @@ def query_pets(
                         for pet in pet_list
                         if isinstance(pet, dict)
                     ]
+                    detail_fields = (
+                        ("id", "档案编号"),
+                        ("name", "名称"),
+                        ("breed", "品种"),
+                        ("age", "年龄"),
+                        ("healthStatus", "健康状态"),
+                        ("health", "健康描述"),
+                        ("area", "所在区域"),
+                        ("foundTime", "发现时间"),
+                    )
+                    pet_details = [
+                        "，".join(
+                            f"{label}：{pet[key]}"
+                            for key, label in detail_fields
+                            if pet.get(key) not in (None, "")
+                        )
+                        for pet in pets
+                    ]
                     result = {
                         "success": True,
                         "count": len(pets),
-                        "message": f"共查询到 {len(pets)} 只相关的{pet_label}。" if pets else f"暂未找到符合条件的{pet_label}。",
+                        "message": (
+                            f"共查询到 {len(pets)} 只相关的{pet_label}：{'；'.join(pet_details)}"
+                            if pets
+                            else f"暂未找到符合条件的{pet_label}。"
+                        ),
                     }
                     if len(pets) == 1:
                         result["pet"] = pets[0]
