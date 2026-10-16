@@ -28,7 +28,7 @@ from memory import MemoryManager
 class Agent:
     def __init__(self, user_id="local", session_id="cli"):
         self._turn_lock = asyncio.Lock()
-        self.pet_registration = PetRegistration()
+        self.pet_registration = PetRegistration(user_id=user_id, session_id=session_id)
         self.client = AsyncOpenAI(
             base_url="https://api.deepseek.com/v1",
             api_key=os.getenv("OPENAI_API_KEY"),

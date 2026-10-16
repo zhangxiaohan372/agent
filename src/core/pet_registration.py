@@ -1,4 +1,6 @@
+import json
 from enum import Enum
+from database.redis_client import redis_client
 
 
 class RegistrationStatus(Enum):
@@ -41,11 +43,55 @@ class PetRegistration:
         "不要提交",
     }
 
-    def __init__(self):
+    def __init__(self, user_id: str = "default", session_id: str = "default"):
+        self.user_id = user_id
+        self.session_id = session_id
+        self.redis_key = f"pet_reg:{user_id}:{session_id}"
+
         self.status = RegistrationStatus.IDLE
         self.fields = {}
         self.submitted = set()
         self.uncertain = set()
+
+        self.load_from_redis()
+
+    def save_to_redis(self, ttl: int = 1800):
+        """将当前会话状态暂存到 Redis，并设置 TTL（默认30分钟/1800秒）"""
+        if self.status in {
+            RegistrationStatus.IDLE,
+            RegistrationStatus.CANCELLED,
+            RegistrationStatus.SUBMITTED,
+        }:
+            self.clear_redis()
+            return
+        payload = {
+            "status": self.status.value,
+            "fields": self.fields,
+        }
+        try:
+            redis_client.set(self.redis_key, json.dumps(payload, ensure_ascii=False), ex=ttl)
+        except Exception:
+            pass
+
+    def load_from_redis(self):
+        """从 Redis 恢复可能还未过期的历史登记草稿"""
+        try:
+            raw = redis_client.get(self.redis_key)
+            if raw:
+                data = json.loads(raw)
+                status_val = data.get("status")
+                if status_val:
+                    self.status = RegistrationStatus(status_val)
+                self.fields = data.get("fields", {})
+        except Exception:
+            pass
+
+    def clear_redis(self):
+        """清除 Redis 中的当前会话草稿"""
+        try:
+            redis_client.delete(self.redis_key)
+        except Exception:
+            pass
 
     @staticmethod
     def _normalize_reply(text):
@@ -65,10 +111,12 @@ class PetRegistration:
     def cancel(self):
         self.fields = {}
         self.status = RegistrationStatus.CANCELLED
+        self.clear_redis()
 
     def begin_revision(self):
         if self.status == RegistrationStatus.AWAITING_CONFIRMATION:
             self.status = RegistrationStatus.COLLECTING
+            self.save_to_redis(1800)
 
     def propose(self, arguments):
         if not isinstance(arguments, dict):
@@ -103,6 +151,7 @@ class PetRegistration:
         ]
         if missing:
             self.status = RegistrationStatus.COLLECTING
+            self.save_to_redis(1800)
             return f"登记还缺少：{'、'.join(missing)}。请补充这些信息，暂未提交。"
 
         fingerprint = tuple(self.fields[field] for field in self.FIELD_LABELS)
@@ -114,6 +163,7 @@ class PetRegistration:
             return "相同的登记信息在本会话中已成功提交，请勿重复提交。"
 
         self.status = RegistrationStatus.AWAITING_CONFIRMATION
+        self.save_to_redis(1800)
         details = "\n".join(
             f"- {label}：{self.fields[field]}"
             for field, label in self.FIELD_LABELS.items()
@@ -143,3 +193,4 @@ class PetRegistration:
             self.status = RegistrationStatus.UNCERTAIN
         else:
             self.status = RegistrationStatus.CANCELLED
+        self.clear_redis()
