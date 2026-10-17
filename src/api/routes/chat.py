@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from api.schemas import ChatRequest, ConfirmRequest
 from api.session import get_agent
+from managers.message_manager import MessageManager
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -156,3 +157,19 @@ async def chat_confirm(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/chat/history")
+async def get_chat_history(
+    session_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(authenticate_user),
+):
+    """从 MySQL 历史归档中查询指定会话的完整历史记录。"""
+    real_user_id = str(current_user["user_id"])
+    records = MessageManager.get_archived_history(
+        user_id=real_user_id, session_id=session_id, limit=limit, offset=offset
+    )
+    return {"success": True, "data": records, "msg": "ok"}
+

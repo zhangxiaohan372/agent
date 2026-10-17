@@ -36,6 +36,9 @@ class FallbackMemoryStore:
     def ttl(self, name: str) -> int:
         return -1
 
+    def exists(self, name: str) -> bool:
+        return name in self._store
+
 
 def create_redis_client():
     """创建并测试 Redis 连接，若失败则安全降级到内存模式。"""

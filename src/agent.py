@@ -37,7 +37,7 @@ class Agent:
         self.mcp_manager = MCPManager()
         self._mcp_initialized = False
 
-        self.message_manager = MessageManager()
+        self.message_manager = MessageManager(user_id=user_id, session_id=session_id)
         self.prompt_manager = PromptManager()
         self.message_manager.add_system_message(self.prompt_manager.get_system_prompt())
         self.router = Router(
