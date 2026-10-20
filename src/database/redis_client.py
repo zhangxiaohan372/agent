@@ -1,6 +1,9 @@
 import os
 import logging
-import redis
+try:
+    import redis
+except ImportError:
+    redis = None
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -42,6 +45,9 @@ class FallbackMemoryStore:
 
 def create_redis_client():
     """创建并测试 Redis 连接，若失败则安全降级到内存模式。"""
+    if redis is None:
+        print("[Redis] 环境中未安装 redis 模块，系统已安全降级为内存会话模式。")
+        return FallbackMemoryStore()
     try:
         client = redis.Redis(
             host=REDIS_HOST,
