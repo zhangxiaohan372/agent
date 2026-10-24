@@ -271,3 +271,7 @@ class Agent:
 
     def chat(self):
         asyncio.run(self._async_chat())
+
+
+if __name__ == "__main__":
+    Agent().chat()

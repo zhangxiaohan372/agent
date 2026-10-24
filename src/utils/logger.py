@@ -37,10 +37,10 @@ def get_logger(name: str = "agent") -> logging.Logger:
     logger.propagate = False
 
     if not logger.handlers:
-        # 1. 控制台 Handler (默认 INFO)
+        # 1. 控制台 Handler (默认 DEBUG)
         console_handler = logging.StreamHandler(sys.stdout)
-        console_level_name = os.getenv("CONSOLE_LOG_LEVEL", "INFO").upper()
-        console_handler.setLevel(getattr(logging, console_level_name, logging.INFO))
+        console_level_name = os.getenv("CONSOLE_LOG_LEVEL", "DEBUG").upper()
+        console_handler.setLevel(getattr(logging, console_level_name, logging.DEBUG))
         console_formatter = logging.Formatter(
             fmt="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
