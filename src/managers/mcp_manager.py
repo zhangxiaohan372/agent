@@ -19,6 +19,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from utils.logger import get_logger
+
+logger = get_logger("mcp")
 
 
 class MCPManager:
@@ -42,7 +45,7 @@ class MCPManager:
     async def connect_all(self):
         """步骤 1 & 2 & 3: 启动子进程、初始化会话并抓取工具列表"""
         if not self.config_path.exists():
-            print(f"[MCP] 配置文件不存在: {self.config_path}")
+            logger.debug(f"配置文件不存在: {self.config_path}")
             return
 
         with open(self.config_path, "r", encoding="utf-8") as f:
@@ -73,7 +76,7 @@ class MCPManager:
                 )
                 # 设置 5 秒超时，防止外部子进程（如 uvx 下载包）卡死整个请求
                 await asyncio.wait_for(session.initialize(), timeout=5.0)
-                print(f"[MCP] 已建立连接: {server_name}")
+                logger.info(f"已建立 MCP 连接: {server_name}")
 
                 # 步骤 3: 获取元数据并注册到大模型格式
                 tools_result = await session.list_tools()
@@ -89,7 +92,7 @@ class MCPManager:
                             },
                         }
                     )
-                    print(f"  └─ 注册工具: {tool.name}")
+                    logger.debug(f"  └─ 注册 MCP 工具: {tool.name}")
 
                 # 连接成功，才把该服务的生命周期托管给全局 exit_stack
                 self.exit_stack.push_async_callback(server_stack.aclose)
@@ -97,7 +100,7 @@ class MCPManager:
             except Exception as e:
                 # 💥 核心降级：连接失败时，立刻关掉刚才进入的半截子进程，释放 AnyIO 作用域
                 await server_stack.aclose()
-                print(f"[MCP警告] 服务 {server_name} 启动失败，已优雅降级并跳过该工具: {e}")
+                logger.warning(f"服务 {server_name} 启动失败，已优雅降级并跳过该工具: {e}")
 
     async def execute_tool(
         self, tool_name: str, arguments: dict | None = None
@@ -127,4 +130,4 @@ class MCPManager:
     async def close(self):
         """应用关闭时安全杀死所有子进程管道"""
         await self.exit_stack.aclose()
-        print("[MCP] 所有连接与子进程已释放")
+        logger.info("所有 MCP 连接与子进程已安全释放")

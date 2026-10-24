@@ -23,10 +23,14 @@ from managers.prompt_manager import PromptManager
 from managers.tool_manager import ToolManager
 from managers.mcp_manager import MCPManager
 from memory import MemoryManager
+from utils.logger import get_logger
 
 
 class Agent:
     def __init__(self, user_id="local", session_id="cli"):
+        self.user_id = str(user_id)
+        self.session_id = str(session_id)
+        self.logger = get_logger("agent")
         self._turn_lock = asyncio.Lock()
         self.pet_registration = PetRegistration(user_id=user_id, session_id=session_id)
         self.client = AsyncOpenAI(
@@ -109,6 +113,7 @@ class Agent:
 
     async def run_one_turn_stream(self, user_input, max_steps=3, auth_token=None):
         async with self._turn_lock:
+            self.logger.info(f"[{self.user_id}:{self.session_id}] 收到用户请求: {user_input}")
             if not self._mcp_initialized:
                 await self.init_mcp()
 
@@ -232,25 +237,24 @@ class Agent:
             yield {"type": "done"}
 
     async def run_one_turn(self, user_input, max_steps=3, auth_token=None):
-        print(f"[日志] 用户输入: {user_input}")
+        self.logger.info(f"[{self.user_id}:{self.session_id}] CLI 模式请求: {user_input}")
         chunks = []
 
         async for event in self.run_one_turn_stream(user_input, max_steps, auth_token=auth_token):
             if event["type"] == "step":
-                print(f"[日志] Agent 第 {event['step']} 步")
-                print(f"[日志] Router 路由: {event['routes']}")
+                self.logger.debug(f"[{self.user_id}:{self.session_id}] Agent 第 {event['step']} 步路由: {event['routes']}")
                 if self._is_ready_to_chat(event["routes"]):
-                    print("[日志] 路由为 CHAT，结束多步执行")
+                    self.logger.debug(f"[{self.user_id}:{self.session_id}] 路由为 CHAT，结束多步规划")
             elif event["type"] == "context":
-                print(f"[日志] Executor 上下文: {event['content']}")
-                print("[日志] 已注入上下文")
+                self.logger.debug(f"[{self.user_id}:{self.session_id}] Executor 上下文注入: {event['content']}")
             elif event["type"] == "token":
                 print(event["content"], end="", flush=True)
                 chunks.append(event["content"])
 
         print()
-        print("[日志] LLM 调用完成")
-        return "".join(chunks)
+        full_reply = "".join(chunks)
+        self.logger.info(f"[{self.user_id}:{self.session_id}] LLM 调用完成 (生成 {len(full_reply)} 字)")
+        return full_reply
 
     async def _async_chat(self):
         try:

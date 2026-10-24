@@ -46,7 +46,7 @@ class FallbackMemoryStore:
 def create_redis_client():
     """创建并测试 Redis 连接，若失败则安全降级到内存模式。"""
     if redis is None:
-        print("[Redis] 环境中未安装 redis 模块，系统已安全降级为内存会话模式。")
+        logger.warning("[Redis] 环境中未安装 redis 模块，系统已安全降级为内存会话模式。")
         return FallbackMemoryStore()
     try:
         client = redis.Redis(
@@ -58,10 +58,10 @@ def create_redis_client():
             socket_timeout=2.0,
         )
         client.ping()
-        print(f"[Redis] 已连接到 Redis 服务: {REDIS_HOST}:{REDIS_PORT}")
+        logger.info(f"[Redis] 已成功连接到 Redis 服务: {REDIS_HOST}:{REDIS_PORT}")
         return client
     except Exception as e:
-        print(f"[Redis] 无法连接到 Redis 服务 ({e})，系统已安全降级为内存会话模式。")
+        logger.warning(f"[Redis] 无法连接到 Redis 服务 ({e})，系统已安全降级为内存会话模式。")
         return FallbackMemoryStore()
 
 

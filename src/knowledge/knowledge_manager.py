@@ -3,6 +3,9 @@ from pathlib import Path
 from memory.embedding_manager import EmbeddingManager
 from .init_knowledge import InitKnowledge
 from database.vector_db import get_or_create_collection
+from utils.logger import get_logger
+
+logger = get_logger("knowledge")
 
 class KnowledgeManager:
     def __init__(self, source_path=None):
@@ -14,9 +17,9 @@ class KnowledgeManager:
         # 自动入库检查：如果提供了知识库文件且 Chroma 为空，自动入库
         if self.source_path and Path(self.source_path).exists():
             if self.collection.count() == 0:
-                print(f"[知识库] 检测到 Chroma 集合为空，正在自动入库: {self.source_path}")
+                logger.info(f"检测到 Chroma 集合为空，正在自动入库: {self.source_path}")
                 self.init_knowledge.ingest_file(self.source_path)
-                print(f"[知识库] 入库完成，当前切片数: {self.collection.count()}")
+                logger.info(f"入库完成，当前切片数: {self.collection.count()}")
 
     # search方法
     def search(self, query, top_k=3, document_id=None):
