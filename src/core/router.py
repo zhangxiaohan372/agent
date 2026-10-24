@@ -1,16 +1,13 @@
 import json
+import logging
+from pydantic import ValidationError
+from core.schemas import RouterDecision, RegistrationIntentDecision, RouteItem, RouteType
+
+logger = logging.getLogger(__name__)
 
 
 class Router:
-    VALID_ROUTES = {
-        "MEMORY_WRITE",
-        "MEMORY_SEARCH",
-        "KNOWLEDGE_SEARCH",
-        "KNOWLEDGE_INGEST",
-        "PET_REGISTRATION",
-        "TOOL",
-        "CHAT",
-    }
+    VALID_ROUTES = {r.value for r in RouteType}
 
     def __init__(self, client, prompt, model="deepseek-v4-pro"):
         self.client = client
@@ -18,7 +15,7 @@ class Router:
         self.model = model
 
     async def classify_registration_reply(self, text, status):
-        """Classify a registration reply without allowing the model to write data."""
+        """Classify a registration reply with Pydantic validation."""
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -41,11 +38,13 @@ class Router:
             response_format={"type": "json_object"},
             temperature=0,
         )
+        content = (response.choices[0].message.content or "").strip()
         try:
-            intent = json.loads(response.choices[0].message.content).get("intent")
-        except (AttributeError, TypeError, json.JSONDecodeError):
+            decision = RegistrationIntentDecision.model_validate_json(content)
+            return decision.intent
+        except (ValidationError, Exception) as e:
+            logger.warning(f"[Router] 意图分类 Schema 校验未通过: {e}, 原文: {content}")
             return None
-        return intent if intent in {"confirm", "cancel", "none"} else None
 
     # 路由器判断要聊天、查记忆还是查知识库时，只取最近 6 条用户或助手消息，并参考当前轮刚查到的内容。
     def _build_router_messages(self, messages, history_limit=6):
@@ -105,46 +104,40 @@ class Router:
             response_format={"type": "json_object"},
             temperature=0,
         )
-        content = response.choices[0].message.content.strip()
+        content = (response.choices[0].message.content or "").strip()
+
+        # 使用 Pydantic 进行强类型解析与模式校验
         try:
-            data = json.loads(content)
-            routes = data.get("routes", [])
-        except json.JSONDecodeError:
-            return [
-                {
-                    "type": "CHAT",
-                    "priority": 1,
-                    "query": user_input,
-                }
-            ]
-
-        valid_routes = []
-
-        for route in routes:
-            if not isinstance(route, dict):
-                continue
-            route_type = route.get("type")
-            if route_type not in self.VALID_ROUTES:
-                continue
-            arguments = route.get("args") or route.get("tool_args") or {}
-            if not isinstance(arguments, dict):
-                arguments = {}
-            valid_routes.append(
-                {
-                    "type": route_type,
-                    "query": route.get("query", user_input),
-                    "priority": route.get("priority", 1),
-                    "name": route.get("name") or route.get("tool_name"),
-                    "args": {key: value for key, value in arguments.items() if key != "auth_token"},
-                }
-            )
-
-        if not valid_routes:
-            return [{"type": "CHAT", "priority": 1, "query": user_input}]
-
-        has_non_chat = any(route["type"] != "CHAT" for route in valid_routes)
-
-        if has_non_chat:
-            valid_routes = [route for route in valid_routes if route["type"] != "CHAT"]
-
-        return valid_routes
+            decision = RouterDecision.model_validate_json(content)
+            routes = decision.to_dict_list()
+            if not routes:
+                return [{"type": "CHAT", "priority": 1, "query": user_input, "name": None, "args": {}}]
+            for r in routes:
+                if not r.get("query"):
+                    r["query"] = user_input
+            return routes
+        except ValidationError as e:
+            logger.warning(f"[Router] 输出未通过 Pydantic 校验: {e}, 原文: {content}")
+            # 容错自愈降级：尝试逐项解析可挽救的合法路由，若完全非法则回退 CHAT
+            try:
+                raw_data = json.loads(content)
+                raw_routes = raw_data.get("routes", []) if isinstance(raw_data, dict) else []
+                rescued = []
+                for item in raw_routes:
+                    try:
+                        rescued.append(RouteItem.model_validate(item))
+                    except ValidationError:
+                        continue
+                if rescued:
+                    decision = RouterDecision(routes=rescued)
+                    routes = decision.to_dict_list()
+                    for r in routes:
+                        if not r.get("query"):
+                            r["query"] = user_input
+                    return routes
+            except Exception:
+                pass
+            return [{"type": "CHAT", "priority": 1, "query": user_input, "name": None, "args": {}}]
+        except json.JSONDecodeError as e:
+            logger.error(f"[Router] JSON 解析失败: {e}, 原文: {content}")
+            return [{"type": "CHAT", "priority": 1, "query": user_input, "name": None, "args": {}}]

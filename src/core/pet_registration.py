@@ -1,5 +1,7 @@
 import json
 from enum import Enum
+from pydantic import ValidationError
+from core.schemas import PetRegistrationDraft
 from database.redis_client import redis_client
 
 
@@ -123,26 +125,22 @@ class PetRegistration:
             self.cancel()
             return "登记信息格式不正确，请重新提供。"
 
+        # 使用 Pydantic 进行输入清洗与强模式校验（包括品种类型规范化、去首尾空格等）
+        try:
+            draft = PetRegistrationDraft.model_validate(arguments)
+        except ValidationError:
+            self.cancel()
+            return "登记信息格式不正确，请重新提供。"
+
         if self.status not in {
             RegistrationStatus.COLLECTING,
             RegistrationStatus.AWAITING_CONFIRMATION,
         }:
             self.fields = {}
 
-        for field in self.FIELD_LABELS:
-            value = arguments.get(field)
-            if isinstance(value, str) and value.strip():
-                self.fields[field] = value.strip()
-
-        if self.fields.get("pet_type") in {"猫", "猫咪"}:
-            self.fields["pet_type"] = "cat"
-        elif self.fields.get("pet_type") in {"狗", "狗狗"}:
-            self.fields["pet_type"] = "dog"
-        elif self.fields.get("pet_type"):
-            self.fields["pet_type"] = self.fields["pet_type"].lower()
-
-        if self.fields.get("pet_type") not in {None, "cat", "dog"}:
-            self.fields.pop("pet_type")
+        # 仅合并通过校验的有效非空字段
+        for field, value in draft.model_dump(exclude_none=True).items():
+            self.fields[field] = value
 
         missing = [
             label
