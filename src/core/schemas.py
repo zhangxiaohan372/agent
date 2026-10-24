@@ -16,6 +16,13 @@ class RouteType(str, Enum):
     CHAT = "CHAT"
 
 
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class RouteItem(BaseModel):
     """单条路由决策项，严格校验能力类型、查询内容及入参结构。"""
     type: RouteType = Field(..., description="调用的能力类型")
@@ -56,9 +63,41 @@ class RouteItem(BaseModel):
         }
 
 
+class PlanTask(BaseModel):
+    """分层规划架构下的单个宏观子任务。"""
+    id: int = Field(..., description="子任务编号")
+    title: str = Field(..., description="面向用户的子任务标题（如'检索流浪猫止血急救指引'）")
+    route: RouteItem = Field(..., description="对应的微观执行动作（Route）")
+    status: TaskStatus = Field(default=TaskStatus.PENDING, description="任务执行状态")
+    result: Optional[str] = Field(default=None, description="执行结果快照")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "type": self.route.type.value,
+            "query": self.route.query,
+            "status": self.status.value,
+            "result": self.result,
+        }
+
+
+class ExecutionPlan(BaseModel):
+    """顶层 Plan-and-Solve 生成的宏观任务规划蓝图。"""
+    summary: str = Field(default="", description="整体计划摘要（面向前端展示看板）")
+    tasks: List[PlanTask] = Field(default_factory=list, description="有序子任务序列")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "summary": self.summary,
+            "tasks": [t.to_dict() for t in self.tasks],
+        }
+
+
 class RouterDecision(BaseModel):
-    """Router 顶层决策模型，对模型输出的路由清单进行整体校验与规范化。"""
-    routes: List[RouteItem] = Field(default_factory=list, description="路由决策列表")
+    """Router 顶层决策模型，支持单意图直出与复合任务 Plan-and-Solve 规划。"""
+    plan_summary: Optional[str] = Field(default=None, description="复合任务的规划纲要")
+    routes: List[RouteItem] = Field(default_factory=list, description="路由决策列表（按执行顺序编排）")
 
     @model_validator(mode="after")
     def apply_routing_rules(self) -> "RouterDecision":
@@ -67,6 +106,41 @@ class RouterDecision(BaseModel):
         if has_non_chat:
             self.routes = [r for r in self.routes if r.type != RouteType.CHAT]
         return self
+
+    def to_execution_plan(self, default_summary: str = "已生成多步骤联合救助计划") -> Optional[ExecutionPlan]:
+        """如果包含多个任务动作，自动升格为结构化 ExecutionPlan 任务清单"""
+        if not self.routes or (len(self.routes) == 1 and self.routes[0].type == RouteType.CHAT):
+            return None
+
+        tasks = []
+        for idx, route in enumerate(self.routes, start=1):
+            title = self._generate_task_title(route)
+            tasks.append(PlanTask(id=idx, title=title, route=route))
+
+        summary = self.plan_summary or default_summary
+        return ExecutionPlan(summary=summary, tasks=tasks)
+
+    @staticmethod
+    def _generate_task_title(route: RouteItem) -> str:
+        if route.type == RouteType.KNOWLEDGE_SEARCH:
+            return f"检索业务规程: {route.query or '救助指引'}"
+        elif route.type == RouteType.MEMORY_SEARCH:
+            return f"查找用户偏好记忆: {route.query or '历史偏好'}"
+        elif route.type == RouteType.MEMORY_WRITE:
+            return f"记录用户长期偏好: {route.query or '信息保存'}"
+        elif route.type == RouteType.PET_REGISTRATION:
+            return "核对流浪动物建档草稿与字段完整性"
+        elif route.type == RouteType.TOOL:
+            tool_name = route.name or "未知工具"
+            if tool_name == "query_pets":
+                kw = route.args.get("keyword")
+                return f"在校内档案库检索匹配动物 ({kw or '按特征'})"
+            elif tool_name == "get_current_weather":
+                return f"查询 {route.args.get('location', '')} 实时天气"
+            elif tool_name == "get_current_time":
+                return "获取当前系统基准时间"
+            return f"调用外部工具: {tool_name}"
+        return f"执行步骤: {route.type.value}"
 
     def to_dict_list(self) -> List[Dict[str, Any]]:
         """转为字典列表，兼容 Executor 和 Agent 主循环"""

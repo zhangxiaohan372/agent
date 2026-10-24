@@ -18,82 +18,88 @@ class AgentExecutor:
         self.user_id = user_id
         self.session_id = session_id
 
-    async def execute(self, routes):
-        results = []
-        for route in routes:
-            route_type = route.get("type")
-            query = route.get("query", "")
-            if route_type == "MEMORY_SEARCH":
-                raw = await asyncio.to_thread(
-                    self.memory_manager.search,
-                    query,
-                    self.user_id,
-                    self.session_id,
-                )
-                results.append(self._format_memory_search(raw))
+    async def execute_single_route(self, route):
+        """执行单个微观动作（ReAct Action）并返回结构化上下文。"""
+        route_type = route.get("type")
+        query = route.get("query", "")
+        if route_type == "MEMORY_SEARCH":
+            raw = await asyncio.to_thread(
+                self.memory_manager.search,
+                query,
+                self.user_id,
+                self.session_id,
+            )
+            return self._format_memory_search(raw)
 
-            elif route_type == "KNOWLEDGE_SEARCH":
-                raw = await asyncio.to_thread(self.knowledge_manager.search, query)
-                results.append(self._format_knowledge_search(raw))
+        elif route_type == "KNOWLEDGE_SEARCH":
+            raw = await asyncio.to_thread(self.knowledge_manager.search, query)
+            return self._format_knowledge_search(raw)
 
-            elif route_type == "MEMORY_WRITE":
-                category = "preference"
-                importance = 7
-                embedding = await asyncio.to_thread(
-                    self.memory_manager.embedding_manager.embed, query
-                )
-                await asyncio.to_thread(
-                    self.memory_manager.save,
-                    query,
-                    category,
-                    importance,
-                    embedding,
-                    self.user_id,
-                    self.session_id,
-                )
-                results.append(
-                    {
-                        "type": "MEMORY_WRITE",
-                        "content": f"已保存 [{category}|重要度{importance}] {query}",
-                    }
-                )
-            elif route_type == "TOOL":
-                tool_name = route.get("name")
-                tool_args = route.get("args") or {}
-                tool_args = tool_args.copy() if isinstance(tool_args, dict) else {}
-                tool_args.pop("auth_token", None)
+        elif route_type == "MEMORY_WRITE":
+            category = "preference"
+            importance = 7
+            embedding = await asyncio.to_thread(
+                self.memory_manager.embedding_manager.embed, query
+            )
+            await asyncio.to_thread(
+                self.memory_manager.save,
+                query,
+                category,
+                importance,
+                embedding,
+                self.user_id,
+                self.session_id,
+            )
+            return {
+                "type": "MEMORY_WRITE",
+                "content": f"已保存 [{category}|重要度{importance}] {query}",
+            }
 
-                if tool_name == "register_pet":
-                    results.append({
-                        "type": "TOOL",
-                        "content": "register_pet: 尚未通过代码层确认，拒绝写入。",
-                    })
-                    continue
+        elif route_type == "TOOL":
+            tool_name = route.get("name")
+            tool_args = route.get("args") or {}
+            tool_args = tool_args.copy() if isinstance(tool_args, dict) else {}
+            tool_args.pop("auth_token", None)
 
-                # 优先判断是否是 MCP 注册的工具
-                if self.mcp_manager and tool_name in self.mcp_manager.tool_to_session:
-                    try:
-                        content = await self.mcp_manager.execute_tool(tool_name, tool_args)
-                    except Exception as e:
-                        content = f"MCP 工具执行失败: {e}"
+            if tool_name == "register_pet":
+                return {
+                    "type": "TOOL",
+                    "content": "register_pet: 尚未通过代码层确认，拒绝写入。",
+                }
+
+            # 优先判断是否是 MCP 注册的工具
+            if self.mcp_manager and tool_name in self.mcp_manager.tool_to_session:
+                try:
+                    content = await self.mcp_manager.execute_tool(tool_name, tool_args)
+                except Exception as e:
+                    content = f"MCP 工具执行失败: {e}"
+            else:
+                fn = self.tool_manager.available_functions.get(tool_name)
+                if fn is None:
+                    content = f"未知工具: {tool_name}"
                 else:
-                    fn = self.tool_manager.available_functions.get(tool_name)
-                    if fn is None:
-                        content = f"未知工具: {tool_name}"
-                    else:
-                        try:
-                            res = await asyncio.to_thread(fn, **tool_args)
-                            if isinstance(res, dict) and "message" in res:
-                                content = res["message"]
-                            else:
-                                content = str(res)
-                        except Exception as e:
-                            content = f"工具执行异常: {e}"
-                results.append({"type": "TOOL", "content": f"{tool_name}: {content}"})
-            elif route_type == "CHAT":
-                results.append({"type": "CHAT", "content": ""})
+                    try:
+                        res = await asyncio.to_thread(fn, **tool_args)
+                        if isinstance(res, dict) and "message" in res:
+                            content = res["message"]
+                        else:
+                            content = str(res)
+                    except Exception as e:
+                        content = f"工具执行异常: {e}"
+            return {"type": "TOOL", "content": f"{tool_name}: {content}"}
 
-        return results
+        elif route_type == "CHAT":
+            return {"type": "CHAT", "content": ""}
+
+        return {"type": "UNKNOWN", "content": f"未知动作类型: {route_type}"}
+
+    async def execute(self, routes):
+        """支持基于 asyncio.gather 的无依赖任务并发调度，显著降低单轮耗时。"""
+        if not routes:
+            return []
+        tasks = [self.execute_single_route(r) for r in routes]
+        results = await asyncio.gather(*tasks)
+        return list(results)
 
     async def execute_confirmed_pet(self, fields, auth_token):
         if not auth_token:

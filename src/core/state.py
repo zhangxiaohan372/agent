@@ -6,3 +6,4 @@ class AgentState:
         self.step = 0
         self.finished = False
         self.final_answer = None
+        self.plan = None

@@ -17,6 +17,7 @@ from core.executor import AgentExecutor
 from core.pet_registration import PetRegistration, RegistrationStatus
 from core.router import Router
 from core.state import AgentState
+from core.schemas import RouteItem, RouterDecision, TaskStatus, ExecutionPlan
 from knowledge import KnowledgeManager
 from managers.message_manager import MessageManager
 from managers.prompt_manager import PromptManager
@@ -171,6 +172,21 @@ class Agent:
                 state.routes = await self.router.route(self.message_manager.get_messages())
                 yield {"type": "step", "step": state.step, "routes": state.routes}
 
+                # 顶层 Plan-and-Solve: 若检测到多步骤复合意图，生成可视化的执行清单推给前端看板
+                if state.step == 1 and len(state.routes) > 1 and not state.plan:
+                    try:
+                        decision = RouterDecision(routes=[RouteItem(**r) for r in state.routes])
+                        plan = decision.to_execution_plan(default_summary="已规划多步骤联合处理方案")
+                        if plan:
+                            state.plan = plan
+                            self.logger.info(
+                                f"[{self.user_id}:{self.session_id}] 顶层 Plan-and-Solve 生成计划清单 "
+                                f"({len(plan.tasks)} 步): {plan.summary}"
+                            )
+                            yield {"type": "plan_created", "plan": plan.to_dict()}
+                    except Exception as e:
+                        self.logger.warning(f"生成任务规划清单异常: {e}")
+
                 proposals = [
                     route for route in state.routes
                     if route.get("type") == "PET_REGISTRATION"
@@ -227,7 +243,39 @@ class Agent:
                     # 本轮计划调用的能力已经全部执行过，无需重复执行，直接进入生成最终回复
                     break
 
-                context = await self.executor.execute(unexecuted_routes)
+                # 微观 ReAct 执行层：如果有任务清单，实时向前端推送任务状态跃迁 (pending -> running -> completed)
+                if state.plan:
+                    context = []
+                    for r in unexecuted_routes:
+                        matched_task = next(
+                            (
+                                t for t in state.plan.tasks
+                                if t.route.type.value == r.get("type")
+                                and (not t.route.name or t.route.name == r.get("name"))
+                                and t.status == TaskStatus.PENDING
+                            ),
+                            None,
+                        )
+                        if matched_task:
+                            matched_task.status = TaskStatus.RUNNING
+                            self.logger.debug(
+                                f"[{self.user_id}:{self.session_id}] 启动子任务 #{matched_task.id}: {matched_task.title}"
+                            )
+                            yield {"type": "task_updated", "task": matched_task.to_dict()}
+
+                        single_res = await self.executor.execute_single_route(r)
+                        context.append(single_res)
+
+                        if matched_task:
+                            matched_task.status = TaskStatus.COMPLETED
+                            matched_task.result = str(single_res.get("content", ""))[:120]
+                            self.logger.debug(
+                                f"[{self.user_id}:{self.session_id}] 完成子任务 #{matched_task.id}: {matched_task.title}"
+                            )
+                            yield {"type": "task_updated", "task": matched_task.to_dict()}
+                else:
+                    context = await self.executor.execute(unexecuted_routes)
+
                 state.tool_results.extend(context)
                 self.build_context(context)
                 yield {"type": "context", "content": context}
@@ -241,7 +289,19 @@ class Agent:
         chunks = []
 
         async for event in self.run_one_turn_stream(user_input, max_steps, auth_token=auth_token):
-            if event["type"] == "step":
+            if event["type"] == "plan_created":
+                plan = event["plan"]
+                print(f"\n [任务规划看板] {plan.get('summary', '执行方案')}")
+                for t in plan.get("tasks", []):
+                    print(f"  [ ] 任务 #{t['id']}: {t['title']}")
+                print()
+            elif event["type"] == "task_updated":
+                task = event["task"]
+                if task["status"] == "running":
+                    print(f"   [执行中] 任务 #{task['id']}: {task['title']}...")
+                elif task["status"] == "completed":
+                    print(f"   [已完成] 任务 #{task['id']}: {task['title']}")
+            elif event["type"] == "step":
                 self.logger.debug(f"[{self.user_id}:{self.session_id}] Agent 第 {event['step']} 步路由: {event['routes']}")
                 if self._is_ready_to_chat(event["routes"]):
                     self.logger.debug(f"[{self.user_id}:{self.session_id}] 路由为 CHAT，结束多步规划")
