@@ -7,8 +7,9 @@ from core.pet_registration import PetRegistration, RegistrationStatus
 from core.router import Router
 from core.schemas import ExecutionPlan, RouteItem, RouterDecision, TaskStatus
 from core.state import AgentState
+from utils.logger import get_logger
 
-logger = logging.getLogger("workflow")
+logger = get_logger("workflow")
 
 
 class AgentWorkflow:
