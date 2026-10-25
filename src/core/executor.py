@@ -34,7 +34,7 @@ class AgentExecutor:
             return self._format_memory_search(raw)
 
         elif route_type == "KNOWLEDGE_SEARCH":
-            raw = await asyncio.to_thread(self.knowledge_manager.search, query)
+            raw = await asyncio.to_thread(self.knowledge_manager.search, query, top_k=5)
             return self._format_knowledge_search(raw)
 
         elif route_type == "MEMORY_WRITE":
