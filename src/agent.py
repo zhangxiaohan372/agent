@@ -63,6 +63,7 @@ class Agent:
             mcp_manager=self.mcp_manager,
             user_id=user_id,
             session_id=session_id,
+            pet_registration=self.pet_registration,
         )
 
     async def _call_llm(self):
@@ -201,28 +202,38 @@ class Agent:
                         yield {"type": "done"}
                         return
 
-                    propose_result = self.pet_registration.propose(proposals[0].get("args"))
+                    # 仅在【纯粹单意图登记】且无其它子任务（无规划看板）时走直接返回的快速通道
+                    # 如果是多步骤复合任务（如同时有知识库检索、工具查询），则交由底层 Executor 作为子任务执行，避免提前中断流水线
+                    if not state.plan and len(state.routes) == 1:
+                        propose_result = self.pet_registration.propose(proposals[0].get("args"))
 
-                    # 字段不完整：继续文字对话收集缺失信息
-                    if self.pet_registration.status != RegistrationStatus.AWAITING_CONFIRMATION:
+                        # 字段不完整：继续文字对话收集缺失信息
+                        if self.pet_registration.status != RegistrationStatus.AWAITING_CONFIRMATION:
+                            self.message_manager.messages.append({"role": "assistant", "content": propose_result})
+                            yield {"type": "token", "content": propose_result}
+                            yield {"type": "done"}
+                            return
+
+                        # 字段完整、进入待确认：发弹窗事件，不发文字消息
+                        # 前端收到 confirm_dialog 后展示弹窗，用户点击后调 POST /api/chat/confirm
                         self.message_manager.messages.append({"role": "assistant", "content": propose_result})
-                        yield {"type": "token", "content": propose_result}
+                        yield {
+                            "type": "confirm_dialog",
+                            "fields": self.pet_registration.fields.copy(),
+                            "prompt": propose_result,   # 也附带原始文字，前端可选用
+                        }
                         yield {"type": "done"}
                         return
 
-                    # 字段完整、进入待确认：发弹窗事件，不发文字消息
-                    # 前端收到 confirm_dialog 后展示弹窗，用户点击后调 POST /api/chat/confirm
-                    self.message_manager.messages.append({"role": "assistant", "content": propose_result})
-                    yield {
-                        "type": "confirm_dialog",
-                        "fields": self.pet_registration.fields.copy(),
-                        "prompt": propose_result,   # 也附带原始文字，前端可选用
-                    }
-                    yield {"type": "done"}
-                    return
-
-                if self.pet_registration.fields:
+                # 仅在首步且本轮没有任何登记意图时，若有历史未确认草稿才视作用户主动转向其它话题而取消
+                has_registration_intent = any(
+                    r.get("type") == "PET_REGISTRATION"
+                    or (r.get("type") == "TOOL" and r.get("name") == "register_pet")
+                    for r in state.routes
+                )
+                if state.step == 1 and not has_registration_intent and self.pet_registration.fields:
                     self.pet_registration.cancel()
+
                 if self._is_ready_to_chat(state.routes):
                     break
 
@@ -282,6 +293,15 @@ class Agent:
 
             async for text in self.generate():
                 yield {"type": "token", "content": text}
+
+            # 如果在多步骤复合执行后，登记信息已齐全并进入待确认状态，向前端推送 confirm_dialog 事件
+            if self.pet_registration.status == RegistrationStatus.AWAITING_CONFIRMATION:
+                yield {
+                    "type": "confirm_dialog",
+                    "fields": self.pet_registration.fields.copy(),
+                    "prompt": "请核对拟提交的登记信息",
+                }
+
             yield {"type": "done"}
 
     async def run_one_turn(self, user_input, max_steps=3, auth_token=None):
@@ -307,6 +327,11 @@ class Agent:
                     self.logger.debug(f"[{self.user_id}:{self.session_id}] 路由为 CHAT，结束多步规划")
             elif event["type"] == "context":
                 self.logger.debug(f"[{self.user_id}:{self.session_id}] Executor 上下文注入: {event['content']}")
+            elif event["type"] == "confirm_dialog":
+                print(f"\n [待确认提交] {event.get('prompt', '')}")
+                fields = event.get("fields", {})
+                for k, v in fields.items():
+                    print(f"   - {k}: {v}")
             elif event["type"] == "token":
                 print(event["content"], end="", flush=True)
                 chunks.append(event["content"])

@@ -10,6 +10,7 @@ class AgentExecutor:
         mcp_manager=None,
         user_id="local",
         session_id="cli",
+        pet_registration=None,
     ):
         self.memory_manager = memory_manager
         self.knowledge_manager = knowledge_manager
@@ -17,6 +18,7 @@ class AgentExecutor:
         self.mcp_manager = mcp_manager
         self.user_id = user_id
         self.session_id = session_id
+        self.pet_registration = pet_registration
 
     async def execute_single_route(self, route):
         """执行单个微观动作（ReAct Action）并返回结构化上下文。"""
@@ -87,6 +89,21 @@ class AgentExecutor:
                     except Exception as e:
                         content = f"工具执行异常: {e}"
             return {"type": "TOOL", "content": f"{tool_name}: {content}"}
+
+        elif route_type == "PET_REGISTRATION":
+            if not self.pet_registration:
+                return {
+                    "type": "PET_REGISTRATION",
+                    "content": "登记模块未就绪。",
+                }
+            args = route.get("args") or {}
+            propose_result = self.pet_registration.propose(args)
+            return {
+                "type": "PET_REGISTRATION",
+                "content": propose_result,
+                "status": self.pet_registration.status.value,
+                "fields": self.pet_registration.fields.copy(),
+            }
 
         elif route_type == "CHAT":
             return {"type": "CHAT", "content": ""}
