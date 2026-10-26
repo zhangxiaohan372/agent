@@ -3,6 +3,9 @@ from enum import Enum
 from pydantic import ValidationError
 from core.schemas import PetRegistrationDraft
 from database.redis_client import redis_client
+from utils.logger import get_logger
+
+logger = get_logger("pet_registration")
 
 
 class RegistrationStatus(Enum):
@@ -72,8 +75,12 @@ class PetRegistration:
         }
         try:
             redis_client.set(self.redis_key, json.dumps(payload, ensure_ascii=False), ex=ttl)
-        except Exception:
-            pass
+            logger.info(
+                f"[{self.user_id}:{self.session_id}] 登记草稿已暂存至 Redis "
+                f"(状态: {self.status.value}, 字段数: {len(self.fields)}, TTL: {ttl}s)"
+            )
+        except Exception as e:
+            logger.warning(f"[{self.user_id}:{self.session_id}] Redis 暂存草稿失败: {e}")
 
     def load_from_redis(self):
         """从 Redis 恢复可能还未过期的历史登记草稿"""
@@ -85,15 +92,25 @@ class PetRegistration:
                 if status_val:
                     self.status = RegistrationStatus(status_val)
                 self.fields = data.get("fields", {})
-        except Exception:
-            pass
+                logger.info(
+                    f"[{self.user_id}:{self.session_id}] 成功从 Redis 恢复未完成的登记草稿 "
+                    f"(状态: {self.status.value}, 已填字段: {list(self.fields.keys())})"
+                )
+            else:
+                logger.debug(
+                    f"[{self.user_id}:{self.session_id}] Redis 中无活跃草稿（无草稿或已超过 30 分钟 TTL 过期销毁）"
+                )
+        except Exception as e:
+            logger.warning(f"[{self.user_id}:{self.session_id}] Redis 读取草稿失败: {e}")
 
     def clear_redis(self):
         """清除 Redis 中的当前会话草稿"""
         try:
-            redis_client.delete(self.redis_key)
-        except Exception:
-            pass
+            deleted = redis_client.delete(self.redis_key)
+            if deleted:
+                logger.info(f"[{self.user_id}:{self.session_id}] 已清除 Redis 中的历史登记草稿 (Key: {self.redis_key})")
+        except Exception as e:
+            logger.warning(f"[{self.user_id}:{self.session_id}] 清除 Redis 草稿异常: {e}")
 
     @staticmethod
     def _normalize_reply(text):
